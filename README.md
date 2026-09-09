@@ -21,18 +21,19 @@ make app
 make stl
 ```
 
-`make test` runs the Swift test sources, PlatformIO native tests, installer
-tests, and CAD checks. `make firmware` compiles the ESP32-S3 image; `make app`
-creates `build/Caffeinate Switch.app`; and `make stl` exports the four parts to
-`build/stl/`. None of these targets flashes a board, installs a login item, or
-launches the application.
+`make test` runs the SwiftPM XCTest suite when Swift is installed, PlatformIO
+native tests, installer tests, and CAD checks. `make firmware` compiles the
+ESP32-S3 image; `make app` creates `build/Caffeinate Switch.app`; and `make
+stl` exports the four parts to `build/stl/`. None of these targets flashes a
+board, installs a login item, or launches the application.
 
 PlatformIO and OpenSCAD are optional local tools. When either is unavailable,
 the corresponding target prints `SKIP:` with the reason and exits successfully;
 it never reports a skipped check as a pass. CAD source checks still run without
 OpenSCAD. On a host where SwiftPM's compiler and SDK do not match, the Makefile
-prints a documented Swift test `SKIP:` rather than treating the unavailable
-suite as a pass; `make app` still uses a compatible-SDK direct build.
+first runs SwiftPM, then prints a documented Swift test `SKIP:` only for the
+known PackageDescription/compiler-SDK incompatibility; every other Swift test
+failure fails `make`. `make app` still uses a compatible-SDK direct build.
 
 To perform actions that change a device or the Mac, run them explicitly after a
 successful build:
