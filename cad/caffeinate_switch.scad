@@ -21,7 +21,9 @@ $fn = 48;
 eps = 0.02;
 outer_radius = 6;
 rocker_open = [rocker[0] + 2 * fit, rocker[1] + 2 * fit];
+rocker_corner_radius = 0.6;
 inner = [exterior[0] - 2 * wall, exterior[1] - 2 * wall];
+rocker_surround = wall;
 base_size = [
     exterior[0] - 2 * (wall + fit),
     exterior[1] - 2 * (wall + fit)
@@ -38,6 +40,11 @@ boss_center = [
 boss_bottom_z = base_thickness;
 boss_height = 8.5;
 boss_brace_diameter = wall;
+// The ramp expands from the pilot to the furthest brace edge at 45 degrees.
+boss_ramp_run = boss_radius - boss_wall_overlap + boss_brace_diameter / 2
+                 - m2_pilot / 2;
+boss_ramp_height = boss_ramp_run;
+boss_straight_height = boss_height - boss_ramp_height;
 board_top_z = 9.4;
 board_bottom_z = board_top_z - pcb_thickness;
 steam_center_z = 28;
@@ -59,15 +66,33 @@ light_chamber_depth = light_chamber_front_y - light_chamber_rear_y;
 light_chamber_front_height = 7.6;
 light_chamber_rear_height = light_chamber_front_height + light_chamber_depth;
 light_entry_center_z = light_chamber_floor_z + light_chamber_front_height / 2;
-roof_x_run = (inner[0] - rocker_open[0]) / 2;
-roof_y_run = (inner[1] - rocker_open[1]) / 2;
-roof_start_z = exterior[2] - wall
-               - max(roof_x_run, roof_y_run);
+// This intermediate cavity fits the board, allowing both tapered stages to
+// bound their *radial* corner run as well as their X/Y runs.
+roof_support = [board[0] + 2 * fit, board[1] + 2 * fit];
+lower_roof_x_run = (inner[0] - roof_support[0]) / 2;
+lower_roof_y_run = (inner[1] - roof_support[1]) / 2;
+lower_roof_radial_run = sqrt(
+    lower_roof_x_run * lower_roof_x_run
+    + lower_roof_y_run * lower_roof_y_run
+);
+lower_roof_height = lower_roof_radial_run;
+roof_x_run = (roof_support[0] - rocker_open[0]) / 2;
+roof_y_run = (roof_support[1] - rocker_open[1]) / 2;
+roof_radial_run = sqrt(roof_x_run * roof_x_run + roof_y_run * roof_y_run);
+roof_start_z = lower_roof_height;
 roof_height = exterior[2] - wall - roof_start_z;
 
 assert(wall >= 2.4, "wall must be at least 2.4 mm");
 assert(exterior[0] > board[0] + 2 * wall);
 assert(exterior[1] > board[1] + 2 * wall);
+assert(rocker_open[0] > 0 && rocker_open[1] > 0,
+       "rocker opening dimensions must be positive");
+assert(rocker_open[0] > 2 * rocker_corner_radius
+       && rocker_open[1] > 2 * rocker_corner_radius,
+       "rocker opening is too small for its printable corner radius");
+assert(rocker_open[0] + 2 * rocker_surround <= inner[0]
+       && rocker_open[1] + 2 * rocker_surround <= inner[1],
+       "rocker opening must leave printable material within the shell cavity");
 assert(base_radius > 0, "base corner radius must remain positive");
 assert(boss_bottom_z >= base_thickness,
        "bosses must start above the installed base");
@@ -77,10 +102,18 @@ assert(boss_center[0] + m2_clearance / 2 < base_size[0] / 2
 assert(boss_center[0] + boss_radius + 0.001 >= inner[0] / 2 + boss_wall_overlap
        && boss_center[1] + boss_radius + 0.001 >= inner[1] / 2 + boss_wall_overlap,
        "bosses must overlap the shell walls");
+assert(boss_ramp_height >= boss_ramp_run && boss_straight_height > 0,
+       "boss ramp must be self-supporting and leave threaded engagement");
+assert(roof_support[0] >= rocker_open[0] && roof_support[1] >= rocker_open[1],
+       "board-clearance roof support must enclose the rocker opening");
 assert(roof_start_z >= board_top_z + 1.8,
-       "board clips collide with the tapered roof");
-assert(roof_x_run <= roof_height + 0.001);
-assert(roof_y_run <= roof_height + 0.001);
+       "board clips collide with the lower tapered roof");
+assert(lower_roof_x_run >= 0 && lower_roof_y_run >= 0);
+assert(lower_roof_radial_run <= lower_roof_height + 0.001,
+       "lower roof corner overhang exceeds 45 degrees");
+assert(roof_x_run >= 0 && roof_y_run >= 0);
+assert(roof_radial_run <= roof_height + 0.001,
+       "main roof corner overhang exceeds 45 degrees");
 assert(usb[1] + 2 * fit >= (usb[0] + 2 * fit) / 2,
        "USB opening must be tall enough for its 45-degree roof");
 assert(steam_track_roof_rise <= steam_track_roof_run + 0.001,
@@ -144,7 +177,7 @@ module steam_2d(clearance = 0) {
 
 module rocker_cut(height = wall + 2 * eps) {
     linear_extrude(height = height)
-        rounded_rect(rocker_open, 0.6);
+        rounded_rect(rocker_open, rocker_corner_radius);
 }
 
 module usb_cut(depth = 22) {
@@ -168,17 +201,25 @@ module shell_skin() {
         linear_extrude(height = exterior[2])
             rounded_rect([exterior[0], exterior[1]], outer_radius);
 
-        // Preserve full board clearance below the support-free roof.
+        // The lower taper is 45 degrees even at its corners and remains wider
+        // than the board through the board/clip height.
         translate([0, 0, -eps])
-            linear_extrude(height = roof_start_z + 2 * eps)
+            linear_extrude(
+                height = lower_roof_height + 2 * eps,
+                scale = [roof_support[0] / inner[0],
+                         roof_support[1] / inner[1]]
+            )
                 rounded_rect(inner, outer_radius - wall);
 
         translate([0, 0, roof_start_z - eps])
             linear_extrude(
                 height = exterior[2] - wall - roof_start_z + 2 * eps,
-                scale = [rocker_open[0] / inner[0], rocker_open[1] / inner[1]]
+                scale = [rocker_open[0] / roof_support[0],
+                         rocker_open[1] / roof_support[1]]
             )
-                rounded_rect(inner, outer_radius - wall);
+                scale([roof_support[0] / inner[0],
+                       roof_support[1] / inner[1]])
+                    rounded_rect(inner, outer_radius - wall);
 
         translate([0, 0, exterior[2] - wall - eps])
             rocker_cut(wall + 2 * eps);
@@ -252,25 +293,52 @@ module board_rail(right = true) {
 module bosses() {
     for (x = [-boss_center[0], boss_center[0]])
         for (y = [-boss_center[1], boss_center[1]]) {
-            translate([x, y, boss_bottom_z])
-                cylinder(d = boss_diameter, h = boss_height);
-            boss_braces(x, y);
+            boss_ramp(x, y);
+            boss_upright(x, y);
         }
 }
 
-// Two gusset-like hulls join each boss deeply into the nearest side walls.
-module boss_braces(x, y) {
+// The ramp has no horizontal lower face after the pilot is cut.  Its furthest
+// edge reaches the wall braces over boss_ramp_height, which is at least its
+// radial run, so it prints without support from the open bottom.
+module boss_ramp(x, y) {
     hull() {
         translate([x, y, boss_bottom_z])
-            cylinder(d = boss_diameter, h = boss_height);
-        translate([sign(x) * (inner[0] / 2 + wall / 2), y, boss_bottom_z])
-            cylinder(d = boss_brace_diameter, h = boss_height);
+            cylinder(d = m2_pilot, h = eps);
+        translate([x, y, boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_diameter, h = eps);
+        translate([sign(x) * (inner[0] / 2 + wall / 2), y,
+                   boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_brace_diameter, h = eps);
     }
     hull() {
         translate([x, y, boss_bottom_z])
-            cylinder(d = boss_diameter, h = boss_height);
-        translate([x, sign(y) * (inner[1] / 2 + wall / 2), boss_bottom_z])
-            cylinder(d = boss_brace_diameter, h = boss_height);
+            cylinder(d = m2_pilot, h = eps);
+        translate([x, y, boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_diameter, h = eps);
+        translate([x, sign(y) * (inner[1] / 2 + wall / 2),
+                   boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_brace_diameter, h = eps);
+    }
+}
+
+// Vertical material starts only after the self-supporting lower ramp.
+module boss_upright(x, y) {
+    translate([x, y, boss_bottom_z + boss_ramp_height])
+        cylinder(d = boss_diameter, h = boss_straight_height);
+    hull() {
+        translate([x, y, boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_diameter, h = boss_straight_height);
+        translate([sign(x) * (inner[0] / 2 + wall / 2), y,
+                   boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_brace_diameter, h = boss_straight_height);
+    }
+    hull() {
+        translate([x, y, boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_diameter, h = boss_straight_height);
+        translate([x, sign(y) * (inner[1] / 2 + wall / 2),
+                   boss_bottom_z + boss_ramp_height])
+            cylinder(d = boss_brace_diameter, h = boss_straight_height);
     }
 }
 
