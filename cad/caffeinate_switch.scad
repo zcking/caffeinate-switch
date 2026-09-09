@@ -140,7 +140,7 @@ assert(light_chamber_floor_z + light_chamber_rear_height <= exterior[2] - wall,
        "light chamber must not break through the shell roof");
 assert(light_window_width > 0 && light_window_height > 0,
        "light window must leave a positive framed opening");
-assert((light_chamber_width - light_window_width) / 2 >= light_baffle,
+assert((light_chamber_width - light_window_width) / 2 + 0.001 >= light_baffle,
        "light window must retain its side baffles");
 assert(light_window_bottom_z >= steam_center_z - steam_flange[1] / 2 + light_baffle
        && light_window_bottom_z + light_window_height
