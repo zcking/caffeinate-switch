@@ -8,6 +8,7 @@ test -s "$model"
 test -s "$repo_root/cad/export.sh"
 test -s "$repo_root/cad/README.md"
 bash -n "$repo_root/cad/export.sh"
+bash "$repo_root/cad/tests/source_geometry_test.sh"
 
 grep -Fq 'part = "shell";' "$model"
 grep -Fq 'board = [27.2, 51.4];' "$model"

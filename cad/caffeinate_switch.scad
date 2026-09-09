@@ -22,27 +22,78 @@ eps = 0.02;
 outer_radius = 6;
 rocker_open = [rocker[0] + 2 * fit, rocker[1] + 2 * fit];
 inner = [exterior[0] - 2 * wall, exterior[1] - 2 * wall];
-boss_spacing = [60, 52];
+base_size = [
+    exterior[0] - 2 * (wall + fit),
+    exterior[1] - 2 * (wall + fit)
+];
+base_radius = outer_radius - wall - fit;
 boss_diameter = 7.6;
+boss_radius = boss_diameter / 2;
+// Put each boss partly inside the shell wall, then brace it in both directions.
+boss_wall_overlap = wall / 2;
+boss_center = [
+    inner[0] / 2 - boss_radius + boss_wall_overlap,
+    inner[1] / 2 - boss_radius + boss_wall_overlap
+];
+boss_bottom_z = base_thickness;
+boss_height = 8.5;
+boss_brace_diameter = wall;
 board_top_z = 9.4;
 board_bottom_z = board_top_z - pcb_thickness;
 steam_center_z = 28;
 steam_flange = [38, 24];
+steam_track_width = steam_flange[0] + 2 * fit;
+steam_track_depth = flange_thickness + insert_thickness + 2 * fit;
+steam_track_y = -exterior[1] / 2 + wall - fit - flange_thickness / 2;
+steam_track_top = steam_center_z + steam_flange[1] / 2 + fit;
+steam_track_roof_rise = steam_track_depth / 2;
+steam_track_roof_run = steam_track_depth / 2;
+light_baffle = max(wall / 2, 1.2);
+light_entry_size = [5.4 + 2 * fit, 5.5 + 2 * fit];
+light_entry_inset = max(light_entry_size[0] + wall, 9);
+light_chamber_width = steam_flange[0] - 3;
+light_chamber_floor_z = steam_center_z - 3;
+light_chamber_front_y = -inner[1] / 2 + light_entry_inset;
+light_chamber_rear_y = steam_track_y + steam_track_depth + light_baffle;
+light_chamber_depth = light_chamber_front_y - light_chamber_rear_y;
+light_chamber_front_height = 7.6;
+light_chamber_rear_height = light_chamber_front_height + light_chamber_depth;
+light_entry_center_z = light_chamber_floor_z + light_chamber_front_height / 2;
+roof_x_run = (inner[0] - rocker_open[0]) / 2;
+roof_y_run = (inner[1] - rocker_open[1]) / 2;
 roof_start_z = exterior[2] - wall
-               - max((inner[0] - rocker_open[0]) / 2,
-                     (inner[1] - rocker_open[1]) / 2);
+               - max(roof_x_run, roof_y_run);
+roof_height = exterior[2] - wall - roof_start_z;
 
 assert(wall >= 2.4, "wall must be at least 2.4 mm");
 assert(exterior[0] > board[0] + 2 * wall);
 assert(exterior[1] > board[1] + 2 * wall);
+assert(base_radius > 0, "base corner radius must remain positive");
+assert(boss_bottom_z >= base_thickness,
+       "bosses must start above the installed base");
+assert(boss_center[0] + m2_clearance / 2 < base_size[0] / 2
+       && boss_center[1] + m2_clearance / 2 < base_size[1] / 2,
+       "base clearance holes must remain within the base");
+assert(boss_center[0] + boss_radius + 0.001 >= inner[0] / 2 + boss_wall_overlap
+       && boss_center[1] + boss_radius + 0.001 >= inner[1] / 2 + boss_wall_overlap,
+       "bosses must overlap the shell walls");
 assert(roof_start_z >= board_top_z + 1.8,
        "board clips collide with the tapered roof");
-assert((inner[0] - rocker_open[0]) / 2
-       <= exterior[2] - wall - roof_start_z + 0.001);
-assert((inner[1] - rocker_open[1]) / 2
-       <= exterior[2] - wall - roof_start_z + 0.001);
+assert(roof_x_run <= roof_height + 0.001);
+assert(roof_y_run <= roof_height + 0.001);
 assert(usb[1] + 2 * fit >= (usb[0] + 2 * fit) / 2,
        "USB opening must be tall enough for its 45-degree roof");
+assert(steam_track_roof_rise <= steam_track_roof_run + 0.001,
+       "steam track roof must be no steeper than 45 degrees");
+assert(light_baffle >= 1.2,
+       "light chamber needs at least a 1.2 mm opaque baffle");
+assert(light_chamber_depth > 0,
+       "light chamber must remain behind its LED entry");
+assert(light_chamber_rear_height - light_chamber_front_height
+       <= light_chamber_depth + 0.001,
+       "light chamber roof must be no steeper than 45 degrees");
+assert(light_chamber_floor_z + light_chamber_rear_height <= exterior[2] - wall,
+       "light chamber must not break through the shell roof");
 assert(part == "shell" || part == "base" || part == "steam" || part == "coupon",
        str("unknown part: ", part));
 
@@ -141,38 +192,35 @@ module shell_skin() {
         light_chamber();
 
         // A self-supporting 5 mm LED entry from the main cavity.
-        translate([0, -22.5 - eps, 29])
+        translate([0, light_chamber_front_y - eps, light_entry_center_z])
             rotate([-90, 0, 0])
                 linear_extrude(height = 10)
-                    house_2d([5.4 + 2 * fit, 5.5 + 2 * fit]);
+                    house_2d(light_entry_size);
     }
 }
 
 module light_chamber() {
     hull() {
-        translate([-17.5, -28.9, 25])
-            cube([35, 6.4, 7.6]);
-        translate([-17.5, -28.9, 25])
-            cube([35, eps, 14]);
+        translate([-light_chamber_width / 2, light_chamber_front_y,
+                   light_chamber_floor_z])
+            cube([light_chamber_width, eps, light_chamber_front_height]);
+        translate([-light_chamber_width / 2, light_chamber_rear_y,
+                   light_chamber_floor_z])
+            cube([light_chamber_width, eps, light_chamber_rear_height]);
     }
 }
 
 module insert_track() {
-    track_width = steam_flange[0] + 2 * fit;
-    track_depth = flange_thickness + insert_thickness + 2 * fit;
-    track_top = steam_center_z + steam_flange[1] / 2 + fit;
-    track_y = -exterior[1] / 2 + 2.05;
-
     // The 45-degree ridge avoids a flat ceiling over the long loading slot.
     hull() {
-        translate([-track_width / 2, track_y, -eps])
-            cube([track_width, track_depth, track_top + eps]);
+        translate([-steam_track_width / 2, steam_track_y, -eps])
+            cube([steam_track_width, steam_track_depth, steam_track_top + eps]);
         translate([
-            -track_width / 2,
-            track_y + track_depth / 2 - eps / 2,
-            track_top + track_depth / 2
+            -steam_track_width / 2,
+            steam_track_y + steam_track_roof_run - eps / 2,
+            steam_track_top + steam_track_roof_rise
         ])
-            cube([track_width, eps, eps]);
+            cube([steam_track_width, eps, eps]);
     }
 }
 
@@ -202,16 +250,35 @@ module board_rail(right = true) {
 }
 
 module bosses() {
-    for (x = [-boss_spacing[0] / 2, boss_spacing[0] / 2])
-        for (y = [-boss_spacing[1] / 2, boss_spacing[1] / 2])
-            translate([x, y, 0]) cylinder(d = boss_diameter, h = 8.5);
+    for (x = [-boss_center[0], boss_center[0]])
+        for (y = [-boss_center[1], boss_center[1]]) {
+            translate([x, y, boss_bottom_z])
+                cylinder(d = boss_diameter, h = boss_height);
+            boss_braces(x, y);
+        }
+}
+
+// Two gusset-like hulls join each boss deeply into the nearest side walls.
+module boss_braces(x, y) {
+    hull() {
+        translate([x, y, boss_bottom_z])
+            cylinder(d = boss_diameter, h = boss_height);
+        translate([sign(x) * (inner[0] / 2 + wall / 2), y, boss_bottom_z])
+            cylinder(d = boss_brace_diameter, h = boss_height);
+    }
+    hull() {
+        translate([x, y, boss_bottom_z])
+            cylinder(d = boss_diameter, h = boss_height);
+        translate([x, sign(y) * (inner[1] / 2 + wall / 2), boss_bottom_z])
+            cylinder(d = boss_brace_diameter, h = boss_height);
+    }
 }
 
 module boss_pilots() {
-    for (x = [-boss_spacing[0] / 2, boss_spacing[0] / 2])
-        for (y = [-boss_spacing[1] / 2, boss_spacing[1] / 2])
-            translate([x, y, -eps])
-                cylinder(d = m2_pilot, h = 8.5 + 2 * eps);
+    for (x = [-boss_center[0], boss_center[0]])
+        for (y = [-boss_center[1], boss_center[1]])
+            translate([x, y, boss_bottom_z - eps])
+                cylinder(d = m2_pilot, h = boss_height + 2 * eps);
 }
 
 module shell() {
@@ -237,18 +304,13 @@ module board_retaining_pads() {
 }
 
 module base() {
-    base_size = [
-        exterior[0] - 2 * (wall + fit),
-        exterior[1] - 2 * (wall + fit)
-    ];
-
     union() {
         difference() {
             linear_extrude(height = base_thickness)
-                rounded_rect(base_size, outer_radius - wall - fit);
+                rounded_rect(base_size, base_radius);
 
-            for (x = [-boss_spacing[0] / 2, boss_spacing[0] / 2])
-                for (y = [-boss_spacing[1] / 2, boss_spacing[1] / 2])
+            for (x = [-boss_center[0], boss_center[0]])
+                for (y = [-boss_center[1], boss_center[1]])
                     translate([x, y, -eps])
                         cylinder(d = m2_clearance, h = base_thickness + 2 * eps);
 
