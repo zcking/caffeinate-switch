@@ -54,8 +54,7 @@ public final class Reconciler {
         case .on:
             startAndAcknowledge(sequence: sequence)
         case .off:
-            process.stop()
-            send(.ack(sequence: sequence, state: .off))
+            stopAndAcknowledge(sequence: sequence)
         }
     }
 
@@ -75,5 +74,16 @@ public final class Reconciler {
         }
 
         send(.ack(sequence: sequence, state: .on))
+    }
+
+    private func stopAndAcknowledge(sequence: UInt64) {
+        process.stop()
+
+        guard !process.isRunning else {
+            send(.error(sequence: sequence, code: "CHILD_STOP"))
+            return
+        }
+
+        send(.ack(sequence: sequence, state: .off))
     }
 }

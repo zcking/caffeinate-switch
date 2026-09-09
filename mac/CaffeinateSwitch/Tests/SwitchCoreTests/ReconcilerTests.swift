@@ -36,12 +36,27 @@ final class ReconcilerTests: XCTestCase {
         XCTAssertEqual(sent, [.ack(sequence: 10, state: .off)])
     }
 
+    func testFailedStopReturnsChildStopErrorWithoutAcknowledging() {
+        let process = FakeProcess(running: true, stopsRunning: false)
+        let reconciler = Reconciler(process: process, scheduler: FakeScheduler())
+        var sent: [ProtocolMessage] = []
+        reconciler.send = { sent.append($0) }
+
+        reconciler.receive(.state(sequence: 15, state: .off))
+
+        XCTAssertEqual(process.stopCallCount, 1)
+        XCTAssertTrue(process.isRunning)
+        XCTAssertEqual(sent, [.error(sequence: 15, code: "CHILD_STOP")])
+        XCTAssertFalse(sent.contains(.ack(sequence: 15, state: .off)))
+    }
+
     func testDisconnectStopsAfterTenSecondsOnly() {
         let scheduler = FakeScheduler()
         let process = FakeProcess(running: true)
         let reconciler = Reconciler(process: process, scheduler: scheduler)
 
         reconciler.serialDisconnected()
+        XCTAssertEqual(scheduler.scheduledDelays, [10])
         scheduler.advance(by: 9.9)
         XCTAssertTrue(process.isRunning)
 
@@ -131,13 +146,20 @@ private final class FakeProcess: ChildProcessManaging {
     var isRunning: Bool
     var startError: Error?
     var startsRunning: Bool
+    var stopsRunning: Bool
     private(set) var startCallCount = 0
     private(set) var stopCallCount = 0
 
-    init(running: Bool = false, startError: Error? = nil, startsRunning: Bool = true) {
+    init(
+        running: Bool = false,
+        startError: Error? = nil,
+        startsRunning: Bool = true,
+        stopsRunning: Bool = true
+    ) {
         isRunning = running
         self.startError = startError
         self.startsRunning = startsRunning
+        self.stopsRunning = stopsRunning
     }
 
     func start() throws {
@@ -150,7 +172,9 @@ private final class FakeProcess: ChildProcessManaging {
 
     func stop() {
         stopCallCount += 1
-        isRunning = false
+        if stopsRunning {
+            isRunning = false
+        }
     }
 }
 
@@ -171,8 +195,10 @@ private final class FakeScheduler: Scheduler {
 
     private var now: Double = 0
     private var actions: [ScheduledAction] = []
+    private(set) var scheduledDelays: [Double] = []
 
     func schedule(after delay: Double, _ action: @escaping () -> Void) -> any Cancellable {
+        scheduledDelays.append(delay)
         let token = Token()
         actions.append(ScheduledAction(deadline: now + delay, token: token, action: action))
         return token
