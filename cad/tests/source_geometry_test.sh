@@ -19,8 +19,19 @@ grep -Fq 'rocker_open[0] > 0 && rocker_open[1] > 0,' "$model"
 grep -Fq 'rocker_open[0] > 2 * rocker_corner_radius' "$model"
 grep -Fq 'rocker_open[0] + 2 * rocker_surround <= inner[0]' "$model"
 grep -Fq 'light_baffle = max(wall / 2, 1.2);' "$model"
-grep -Fq 'light_chamber_rear_y = steam_track_y + steam_track_depth + light_baffle;' "$model"
+grep -Fq 'insert_rear_y = steam_track_y + steam_track_depth;' "$model"
+grep -Fq 'light_chamber_rear_y = insert_rear_y + light_baffle;' "$model"
 grep -Fq 'light_chamber_rear_height = light_chamber_front_height + light_chamber_depth;' "$model"
+grep -Fq 'light_window_y = insert_rear_y - eps;' "$model"
+grep -Fq 'light_window_depth = light_chamber_rear_y - insert_rear_y + 2 * eps;' "$model"
+grep -Fq 'module light_window() {' "$model"
+grep -Fq 'light_window();' "$model"
+grep -Fq 'steam_seal_y = steam_track_y + fit;' "$model"
+grep -Fq 'steam_seal_depth = steam_track_depth - 2 * fit;' "$model"
+if grep -Fq -- '-31.45' "$model" || grep -Fq 'cube([steam_flange[0], 2.1' "$model"; then
+  echo 'FAIL: steam-track base seal still uses hard-coded coordinates' >&2
+  exit 1
+fi
 
 awk '
   function fail(message) { print "FAIL: " message > "/dev/stderr"; exit 1 }
@@ -31,7 +42,7 @@ awk '
       && open_y + 2 * surround <= inner_y
   }
   BEGIN {
-    exterior_x = 72; exterior_y = 68; exterior_z = 44
+    exterior_x = 72; exterior_y = 68; exterior_z = 44; eps = 0.02
     wall = 2.4; fit = 0.30; base_thickness = 2.4
     rocker_x = 8.8 + 2 * fit; rocker_y = 14 + 2 * fit
     inner_x = exterior_x - 2 * wall; inner_y = exterior_y - 2 * wall
@@ -69,15 +80,35 @@ awk '
     if (track_depth / 2 > track_depth / 2 + 0.001) fail("steam track roof exceeds 45 degrees")
     baffle = wall / 2; if (baffle < 1.2) baffle = 1.2
     track_y = -exterior_y / 2 + wall - fit - 0.8 / 2
+    insert_rear_y = track_y + track_depth
     entry_width = 5.4 + 2 * fit; entry_inset = entry_width + wall
     if (entry_inset < 9) entry_inset = 9
     chamber_front_y = -inner_y / 2 + entry_inset
-    chamber_rear_y = track_y + track_depth + baffle
+    chamber_rear_y = insert_rear_y + baffle
     chamber_depth = chamber_front_y - chamber_rear_y
-    chamber_rear_top = (28 - 3) + 7.6 + chamber_depth
+    chamber_width = 38 - 3
+    chamber_floor = 28 - 3
+    chamber_rear_height = 7.6 + chamber_depth
+    chamber_rear_top = chamber_floor + chamber_rear_height
     if (baffle < 1.2) fail("light baffle is thinner than 1.2 mm")
     if (chamber_depth <= 0) fail("light chamber has no 45-degree roof run")
     if (chamber_rear_top > exterior_z - wall + 0.001) fail("light chamber breaks shell roof")
-    printf "PASS: CAD geometry defaults (boss/base clearance, radial 45-degree roofs, rocker guards, %.1f mm light baffle)\n", baffle
+    window_width = chamber_width - 2 * baffle
+    window_height = chamber_rear_height - 2 * baffle
+    window_bottom = chamber_floor + baffle
+    window_top = window_bottom + window_height
+    window_y = insert_rear_y - eps
+    window_depth = chamber_rear_y - insert_rear_y + 2 * eps
+    if (window_width <= 0 || window_height <= 0) fail("light window has no opening")
+    if ((chamber_width - window_width) / 2 + 0.001 < baffle) fail("light window loses a side baffle")
+    if (window_bottom + 0.001 < 28 - 24 / 2 + baffle || window_top > 28 + 24 / 2 - baffle + 0.001) fail("light window loses an insert perimeter baffle")
+    if (window_y > insert_rear_y + 0.001 || window_y + window_depth + 0.001 < chamber_rear_y) fail("light window does not bridge the insert/chamber cross-section")
+
+    seal_y = track_y + fit
+    seal_depth = track_depth - 2 * fit
+    seal_height = 28 - 24 / 2 - fit - base_thickness
+    if (seal_depth <= 0 || seal_height <= 0) fail("steam-track base seal has no volume")
+    if (seal_y + 0.001 < track_y || seal_y + seal_depth > insert_rear_y + 0.001) fail("steam-track base seal leaves its derived track bounds")
+    printf "PASS: CAD geometry defaults (radial roofs, framed optical cross-section, %.1f mm light baffles, derived base seal)\n", baffle
   }
 '

@@ -101,6 +101,17 @@ final class ReconcilerTests: XCTestCase {
         XCTAssertEqual(sent, [.error(sequence: 0, code: "VERSION")])
     }
 
+    func testUnsupportedHelloLineIsNotDiscardedAsAnOrdinaryParseError() {
+        let reconciler = Reconciler(process: FakeProcess(), scheduler: FakeScheduler())
+        var sent: [ProtocolMessage] = []
+        reconciler.send = { sent.append($0) }
+
+        let parsed = reconciler.receive(line: "HELLO 2")
+
+        XCTAssertNil(parsed)
+        XCTAssertEqual(sent, [.error(sequence: 0, code: "VERSION")])
+    }
+
     func testStartFailureReturnsChildStartErrorInsteadOfAcknowledgement() {
         let process = FakeProcess(startError: FakeProcessError.failedToStart)
         let reconciler = Reconciler(process: process, scheduler: FakeScheduler())
@@ -137,6 +148,19 @@ final class ReconcilerTests: XCTestCase {
         reconciler.childExited()
 
         XCTAssertEqual(sent, [.error(sequence: 12, code: "CHILD_EXIT")])
+    }
+
+    func testStaleExitCallbackIsIgnoredWhileReplacementChildIsRunning() {
+        let process = FakeProcess(running: true)
+        let reconciler = Reconciler(process: process, scheduler: FakeScheduler())
+        var sent: [ProtocolMessage] = []
+        reconciler.send = { sent.append($0) }
+        reconciler.receive(.state(sequence: 16, state: .on))
+        sent.removeAll()
+
+        reconciler.childExited()
+
+        XCTAssertTrue(sent.isEmpty)
     }
 
     func testExpectedExitForDesiredOffIsIgnored() {

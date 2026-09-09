@@ -19,6 +19,10 @@ case "${1:-}" in
     *) usage; exit 2 ;;
 esac
 
+[ -n "${BASH_SOURCE[0]:-}" ] || die "cannot locate uninstall script"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "$SCRIPT_DIR/launch-agent.sh"
+
 [ -n "${HOME:-}" ] || die "HOME must be set"
 case "$HOME" in
     /*) ;;
@@ -27,16 +31,19 @@ esac
 
 INSTALLED_APP="$HOME/Applications/Caffeinate Switch.app"
 INSTALLED_PLIST="$HOME/Library/LaunchAgents/com.zachking.CaffeinateSwitch.plist"
+LAUNCH_AGENT_TARGET="gui/$(id -u)/com.zachking.CaffeinateSwitch"
 
 if "$dry_run"; then
-    echo "DRY RUN: launchctl bootout gui/$(id -u) \"$INSTALLED_PLIST\" (if present)" >&2
+    echo "DRY RUN: launchctl bootout \"$LAUNCH_AGENT_TARGET\" (not-loaded is allowed)" >&2
     echo "DRY RUN: remove \"$INSTALLED_APP\"" >&2
     echo "DRY RUN: remove \"$INSTALLED_PLIST\"" >&2
     exit 0
 fi
 
+bootout_launch_agent "$LAUNCH_AGENT_TARGET" || \
+    die "could not safely unload $LAUNCH_AGENT_TARGET"
+
 if [ -e "$INSTALLED_PLIST" ]; then
-    launchctl bootout "gui/$(id -u)" "$INSTALLED_PLIST" 2>/dev/null || true
     rm -f "$INSTALLED_PLIST"
 fi
 

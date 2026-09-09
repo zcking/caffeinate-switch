@@ -58,16 +58,30 @@ void SwitchController::sample(bool grounded, uint32_t nowMs) {
 }
 
 void SwitchController::serialConnected(uint32_t nowMs) {
+  serialConnected_ = true;
   queueHello();
   if (!hasStableState_) return;
 
-  // A host reconnect needs the current desired state, but it does not make a
-  // previously confirmed physical state unknown.
+  // A descriptor reopening is not a confirmation of the Mac-side process.
+  // Pulse until the host acknowledges the current physical state again.
   awaitingAck_ = true;
+  confirmedState_ = ConfirmedState::Unknown;
   queueState(nowMs);
 }
 
+void SwitchController::serialDisconnected() {
+  serialConnected_ = false;
+  awaitingAck_ = false;
+  confirmedState_ = ConfirmedState::Unknown;
+
+  // Nothing already queued can reach the closed CDC session.  Reconnection
+  // starts a fresh session with HELLO followed by the current stable state.
+  outbound_.clear();
+}
+
 void SwitchController::receiveLine(std::string_view line) {
+  if (!serialConnected_) return;
+
   const size_t first = line.find(' ');
   if (first == std::string_view::npos) return;
   const std::string_view type = line.substr(0, first);
@@ -88,18 +102,23 @@ void SwitchController::receiveLine(std::string_view line) {
     }
     awaitingAck_ = false;
     confirmedState_ = receivedGrounded ? ConfirmedState::On : ConfirmedState::Off;
-  } else if (type == "ERROR" && receivedSequence == sequence_ &&
-             !remainder.empty() && remainder.find_first_of(" \t\r\n") == std::string_view::npos) {
+  } else if (type == "ERROR" && !remainder.empty() &&
+             remainder.find_first_of(" \t\r\n") == std::string_view::npos &&
+             (receivedSequence == sequence_ ||
+              (receivedSequence == 0 && remainder == "VERSION"))) {
+    // VERSION is a session-level failure and therefore uses sequence zero,
+    // even after this controller has advanced its physical-state sequence.
     awaitingAck_ = false;
     confirmedState_ = ConfirmedState::Error;
   }
 }
 
 void SwitchController::tick(uint32_t nowMs) {
-  if (awaitingAck_ && elapsed(nowMs, lastStateSentMs_, RETRY_MS)) {
+  if (serialConnected_ && awaitingAck_ &&
+      elapsed(nowMs, lastStateSentMs_, RETRY_MS)) {
     queueState(nowMs);
   }
-  if (elapsed(nowMs, lastHeartbeatMs_, HEARTBEAT_MS)) {
+  if (serialConnected_ && elapsed(nowMs, lastHeartbeatMs_, HEARTBEAT_MS)) {
     queuePing(nowMs);
   }
 }
@@ -111,6 +130,12 @@ std::string SwitchController::takeOutbound() {
 }
 
 uint8_t SwitchController::ledBrightness(uint32_t nowMs) const {
+  if (!serialConnected_ || awaitingAck_) {
+    const double phase = static_cast<double>(nowMs % 2000) / 2000.0;
+    return static_cast<uint8_t>(
+        (std::sin(phase * 2.0 * PI - PI / 2.0) + 1.0) * 127.5);
+  }
+
   switch (confirmedState_) {
     case ConfirmedState::On:
       return 255;

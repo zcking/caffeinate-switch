@@ -71,7 +71,7 @@ final class CaffeinateProcessTests: XCTestCase {
         XCTAssertFalse(process.isRunning)
     }
 
-    func testObsoleteExitCannotOverwriteReplacementRunningState() throws {
+    func testObsoleteExitCannotPublishStateOrUnexpectedCallbackAfterReplacement() throws {
         let fixtureURL = try makeSignalWaitingFixture()
         let delivery = QueuedMainDelivery()
         let process = CaffeinateProcess(
@@ -101,7 +101,7 @@ final class CaffeinateProcessTests: XCTestCase {
         delivery.runFirst() // obsolete child exit
 
         XCTAssertEqual(observedStates, [true, true])
-        XCTAssertEqual(unexpectedExitCount, 1)
+        XCTAssertEqual(unexpectedExitCount, 0)
         XCTAssertTrue(process.isRunning)
     }
 

@@ -29,6 +29,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 MAC_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 REPO_ROOT="$(cd -- "$MAC_DIR/.." && pwd -P)"
 TEMPLATE="$MAC_DIR/Resources/com.zachking.CaffeinateSwitch.plist.template"
+source "$SCRIPT_DIR/launch-agent.sh"
 
 absolute_path() {
     case "$1" in
@@ -44,6 +45,7 @@ LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 INSTALLED_APP="$APPLICATIONS_DIR/Caffeinate Switch.app"
 INSTALLED_EXECUTABLE="$INSTALLED_APP/Contents/MacOS/CaffeinateSwitchApp"
 INSTALLED_PLIST="$LAUNCH_AGENTS_DIR/com.zachking.CaffeinateSwitch.plist"
+LAUNCH_AGENT_TARGET="gui/$(id -u)/com.zachking.CaffeinateSwitch"
 
 [ -f "$TEMPLATE" ] || die "LaunchAgent template is missing: $TEMPLATE"
 
@@ -114,9 +116,8 @@ render_template > "$STAGED_PLIST"
 plutil -lint "$STAGED_PLIST"
 chmod 644 "$STAGED_PLIST"
 
-if [ -e "$INSTALLED_PLIST" ]; then
-    launchctl bootout "gui/$(id -u)" "$INSTALLED_PLIST" 2>/dev/null || true
-fi
+bootout_launch_agent "$LAUNCH_AGENT_TARGET" || \
+    die "could not safely unload $LAUNCH_AGENT_TARGET"
 if [ -e "$INSTALLED_APP" ]; then
     mv "$INSTALLED_APP" "$BACKUP_APP"
 fi

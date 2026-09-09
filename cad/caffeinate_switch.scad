@@ -56,16 +56,27 @@ steam_track_top = steam_center_z + steam_flange[1] / 2 + fit;
 steam_track_roof_rise = steam_track_depth / 2;
 steam_track_roof_run = steam_track_depth / 2;
 light_baffle = max(wall / 2, 1.2);
+insert_rear_y = steam_track_y + steam_track_depth;
 light_entry_size = [5.4 + 2 * fit, 5.5 + 2 * fit];
 light_entry_inset = max(light_entry_size[0] + wall, 9);
 light_chamber_width = steam_flange[0] - 3;
 light_chamber_floor_z = steam_center_z - 3;
 light_chamber_front_y = -inner[1] / 2 + light_entry_inset;
-light_chamber_rear_y = steam_track_y + steam_track_depth + light_baffle;
+light_chamber_rear_y = insert_rear_y + light_baffle;
 light_chamber_depth = light_chamber_front_y - light_chamber_rear_y;
 light_chamber_front_height = 7.6;
 light_chamber_rear_height = light_chamber_front_height + light_chamber_depth;
 light_entry_center_z = light_chamber_floor_z + light_chamber_front_height / 2;
+light_window_width = light_chamber_width - 2 * light_baffle;
+light_window_height = light_chamber_rear_height - 2 * light_baffle;
+light_window_bottom_z = light_chamber_floor_z + light_baffle;
+light_window_y = insert_rear_y - eps;
+light_window_depth = light_chamber_rear_y - insert_rear_y + 2 * eps;
+steam_seal_width = steam_flange[0];
+steam_seal_y = steam_track_y + fit;
+steam_seal_depth = steam_track_depth - 2 * fit;
+steam_seal_height = steam_center_z - steam_flange[1] / 2
+                    - fit - base_thickness;
 // This intermediate cavity fits the board, allowing both tapered stages to
 // bound their *radial* corner run as well as their X/Y runs.
 roof_support = [board[0] + 2 * fit, board[1] + 2 * fit];
@@ -127,6 +138,22 @@ assert(light_chamber_rear_height - light_chamber_front_height
        "light chamber roof must be no steeper than 45 degrees");
 assert(light_chamber_floor_z + light_chamber_rear_height <= exterior[2] - wall,
        "light chamber must not break through the shell roof");
+assert(light_window_width > 0 && light_window_height > 0,
+       "light window must leave a positive framed opening");
+assert((light_chamber_width - light_window_width) / 2 >= light_baffle,
+       "light window must retain its side baffles");
+assert(light_window_bottom_z >= steam_center_z - steam_flange[1] / 2 + light_baffle
+       && light_window_bottom_z + light_window_height
+          <= steam_center_z + steam_flange[1] / 2 - light_baffle,
+       "light window must retain top and bottom insert baffles");
+assert(light_window_y <= insert_rear_y
+       && light_window_y + light_window_depth >= light_chamber_rear_y,
+       "light window must connect the insert rear face to the chamber");
+assert(steam_seal_depth > 0 && steam_seal_height > 0,
+       "steam-track base seal must have positive dimensions");
+assert(steam_seal_y >= steam_track_y
+       && steam_seal_y + steam_seal_depth <= insert_rear_y,
+       "steam-track base seal must remain inside the loading track");
 assert(part == "shell" || part == "base" || part == "steam" || part == "coupon",
        str("unknown part: ", part));
 
@@ -232,6 +259,10 @@ module shell_skin() {
         // Enclosed light chamber with a 45-degree rear-to-front roof.
         light_chamber();
 
+        // A framed aperture carries light onto the insert's rear face while
+        // preserving opaque baffles on every edge of the chamber.
+        light_window();
+
         // A self-supporting 5 mm LED entry from the main cavity.
         translate([0, light_chamber_front_y - eps, light_entry_center_z])
             rotate([-90, 0, 0])
@@ -249,6 +280,12 @@ module light_chamber() {
                    light_chamber_floor_z])
             cube([light_chamber_width, eps, light_chamber_rear_height]);
     }
+}
+
+module light_window() {
+    translate([-light_window_width / 2, light_window_y,
+               light_window_bottom_z])
+        cube([light_window_width, light_window_depth, light_window_height]);
 }
 
 module insert_track() {
@@ -393,10 +430,8 @@ module base() {
         board_rail(true);
 
         // Closes the steam-insert loading track when the base is installed.
-        seal_height = steam_center_z - steam_flange[1] / 2
-                      - fit - base_thickness;
-        translate([-steam_flange[0] / 2, -31.45, base_thickness - eps])
-            cube([steam_flange[0], 2.1, seal_height + eps]);
+        translate([-steam_seal_width / 2, steam_seal_y, base_thickness - eps])
+            cube([steam_seal_width, steam_seal_depth, steam_seal_height + eps]);
     }
 }
 

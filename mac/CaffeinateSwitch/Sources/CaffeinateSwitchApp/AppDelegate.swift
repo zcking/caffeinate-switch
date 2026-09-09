@@ -133,12 +133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func receive(_ line: String, generation: Int) {
         guard generation == connectionGeneration, isSerialConnected else { return }
-        guard let message = try? ProtocolMessage.parse(line) else { return }
+        guard let message = reconciler.receive(line: line) else { return }
 
         if case .state(_, let state) = message {
             rockerItem.title = "Rocker: \(state == .on ? "on" : "off")"
         }
-        reconciler.receive(message)
     }
 
     private func send(_ message: ProtocolMessage) {

@@ -20,6 +20,7 @@ void test_state_changes_only_after_40_ms_stable() {
 
 void test_stale_acknowledgement_cannot_confirm_led() {
   SwitchController c;
+  c.serialConnected(0); c.takeOutbound();
   c.sample(true, 0); c.sample(true, 41); c.takeOutbound();
   c.receiveLine("ACK 0 ON");
   TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
@@ -27,6 +28,7 @@ void test_stale_acknowledgement_cannot_confirm_led() {
 
 void test_matching_acknowledgement_confirms_requested_state() {
   SwitchController c;
+  c.serialConnected(0); c.takeOutbound();
   c.sample(false, 0); c.sample(false, 40); c.takeOutbound();
   c.receiveLine("ACK 1 OFF");
   TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Off);
@@ -35,6 +37,7 @@ void test_matching_acknowledgement_confirms_requested_state() {
 
 void test_pending_state_retries_every_second_and_heartbeats_every_three_seconds() {
   SwitchController c;
+  c.serialConnected(0); c.takeOutbound();
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
   c.tick(999);
   TEST_ASSERT_TRUE(c.takeOutbound().empty());
@@ -48,6 +51,7 @@ void test_error_and_unknown_led_patterns_use_required_timing() {
   SwitchController c;
   TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(0));
   TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(1000));
+  c.serialConnected(0); c.takeOutbound();
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
   c.receiveLine("ERROR 1 CHILD_EXIT");
   TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Error);
@@ -55,20 +59,43 @@ void test_error_and_unknown_led_patterns_use_required_timing() {
   TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(125));
 }
 
-void test_serial_reconnect_advertises_stable_state_without_resetting_led_confirmation() {
+void test_disconnect_and_reconnect_pulse_until_current_state_is_acknowledged() {
   SwitchController c;
+  c.serialConnected(0); c.takeOutbound();
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
   c.receiveLine("ACK 1 ON");
   TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(250));
+
+  c.serialDisconnected();
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
+  TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(0));
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(1000));
+  c.receiveLine("ACK 1 ON");
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
 
   c.serialConnected(100);
   TEST_ASSERT_EQUAL_STRING("HELLO 1\nSTATE 1 ON\n", c.takeOutbound().c_str());
-  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(1000));
 
   c.receiveLine("ACK 0 ON");
-  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
   c.receiveLine("ACK 1 ON");
   TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(250));
+}
+
+void test_session_version_error_uses_sequence_zero_and_blinks_rapidly() {
+  SwitchController c;
+  c.serialConnected(0); c.takeOutbound();
+  c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
+
+  c.receiveLine("ERROR 0 VERSION");
+
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Error);
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(124));
+  TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(125));
 }
 
 int main(int, char**) {
@@ -78,6 +105,7 @@ int main(int, char**) {
   RUN_TEST(test_matching_acknowledgement_confirms_requested_state);
   RUN_TEST(test_pending_state_retries_every_second_and_heartbeats_every_three_seconds);
   RUN_TEST(test_error_and_unknown_led_patterns_use_required_timing);
-  RUN_TEST(test_serial_reconnect_advertises_stable_state_without_resetting_led_confirmation);
+  RUN_TEST(test_disconnect_and_reconnect_pulse_until_current_state_is_acknowledged);
+  RUN_TEST(test_session_version_error_uses_sequence_zero_and_blinks_rapidly);
   return UNITY_END();
 }

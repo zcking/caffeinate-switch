@@ -64,8 +64,10 @@ measuring the coupon and actual hardware.
    behind the front face, with its raised wisps facing inward. The top of the
    track locates it; the installed base closes the track and retains it.
 2. Push a 5 mm amber LED from the main cavity into the self-supporting opening
-   at the rear of the isolated light pocket. The LED body plugs the only light
-   path into the main cavity; use a small amount of opaque adhesive if needed.
+   at the rear of the isolated light pocket. A framed optical aperture opens
+   the chamber onto the insert rear face while retaining at least 1.2 mm of
+   opaque perimeter baffle. The LED body plugs the only light path into the
+   main cavity; use a small amount of opaque adhesive if needed.
 3. Snap the PCB downward between the two segmented edge rails on the base, USB
    connector toward the rear. Independent 9 mm clips flex more readily than a
    long rigid rail, while four pads set the PCB height without depending on

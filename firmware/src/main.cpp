@@ -1,5 +1,7 @@
 #include <Arduino.h>
 
+#include <atomic>
+
 #include "Config.h"
 #include "SwitchController.h"
 
@@ -14,7 +16,8 @@ SwitchController controller;
 char inputBuffer[MAX_RECORD_BYTES + 1];
 size_t inputLength = 0;
 bool inputOverflow = false;
-volatile bool serialConnectionPending = false;
+// 1 means connected, -1 means disconnected, and 0 means no pending event.
+std::atomic<int8_t> serialConnectionEvent{0};
 
 bool switchIsGrounded() {
   const int activeLevel = SWITCH_ACTIVE_LOW ? LOW : HIGH;
@@ -39,13 +42,20 @@ void readSerial() {
 }
 
 void onUsbCdcEvent(void*, esp_event_base_t, int32_t eventId, void*) {
-  if (eventId == ARDUINO_USB_CDC_CONNECTED) serialConnectionPending = true;
+  if (eventId == ARDUINO_USB_CDC_CONNECTED) {
+    serialConnectionEvent.store(1, std::memory_order_relaxed);
+  } else if (eventId == ARDUINO_USB_CDC_DISCONNECTED) {
+    serialConnectionEvent.store(-1, std::memory_order_relaxed);
+  }
 }
 
 void handleSerialConnection(uint32_t nowMs) {
-  if (!serialConnectionPending) return;
-  serialConnectionPending = false;
-  controller.serialConnected(nowMs);
+  const int8_t event = serialConnectionEvent.exchange(0, std::memory_order_relaxed);
+  if (event > 0) {
+    controller.serialConnected(nowMs);
+  } else if (event < 0) {
+    controller.serialDisconnected();
+  }
 }
 
 }  // namespace
@@ -61,8 +71,8 @@ void setup() {
 
 void loop() {
   const uint32_t nowMs = millis();
-  controller.sample(switchIsGrounded(), nowMs);
   handleSerialConnection(nowMs);
+  controller.sample(switchIsGrounded(), nowMs);
   readSerial();
   controller.tick(nowMs);
   const std::string outbound = controller.takeOutbound();

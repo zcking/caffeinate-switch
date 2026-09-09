@@ -14,6 +14,7 @@ class SwitchController {
 
   void sample(bool grounded, uint32_t nowMs);
   void serialConnected(uint32_t nowMs);
+  void serialDisconnected();
   void receiveLine(std::string_view line);
   void tick(uint32_t nowMs);
   std::string takeOutbound();
@@ -31,6 +32,7 @@ class SwitchController {
   bool candidateGrounded_ = false;
   bool hasStableState_ = false;
   bool stableGrounded_ = false;
+  bool serialConnected_ = false;
   bool awaitingAck_ = false;
   uint32_t candidateSinceMs_ = 0;
   uint32_t sequence_ = 0;

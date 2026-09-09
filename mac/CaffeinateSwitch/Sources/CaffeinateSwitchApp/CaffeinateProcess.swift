@@ -103,12 +103,35 @@ final class CaffeinateProcess: ChildProcessManaging {
             process = nil
             processGeneration = nil
         }
-        let unexpectedTerminationCallback = onUnexpectedTermination
         lock.unlock()
 
         guard !wasExpected else { return }
         deliverOnMain { [weak self] in
-            self?.publishStateChange(false, for: nil, generation: generation)
+            self?.publishUnexpectedTermination(generation: generation)
+        }
+    }
+
+    private func publishUnexpectedTermination(generation: UInt64) {
+        lock.lock()
+        let isCurrentExit = latestGeneration == generation
+            && processGeneration == nil
+            && process == nil
+        let stateChangeCallback = onStateChange
+        lock.unlock()
+
+        guard isCurrentExit else { return }
+        stateChangeCallback(false)
+
+        // The state observer is allowed to initiate a replacement. Recheck
+        // after it runs so an old exit can never be published for that child.
+        lock.lock()
+        let stillCurrentExit = latestGeneration == generation
+            && processGeneration == nil
+            && process == nil
+        let unexpectedTerminationCallback = onUnexpectedTermination
+        lock.unlock()
+
+        if stillCurrentExit {
             unexpectedTerminationCallback()
         }
     }

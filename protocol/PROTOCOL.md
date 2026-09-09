@@ -22,6 +22,11 @@ ERROR <sequence> <code>
 `<sequence>` is an unsigned decimal integer. State values and record names are
 uppercase. Error codes are a single, non-whitespace token.
 
+A receiver that gets a syntactically valid `HELLO` for any unsupported version
+responds with `ERROR 0 VERSION`. Sequence zero marks this as a session-level
+error rather than an error tied to the latest physical-state sequence; firmware
+must display it even after its state sequence has advanced.
+
 Examples:
 
 ```text

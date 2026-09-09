@@ -16,6 +16,23 @@ public final class Reconciler {
         self.scheduler = scheduler
     }
 
+    /// Parses one complete wire record and routes protocol-version failures.
+    /// Other malformed records remain safely ignored as required by the wire
+    /// contract. The returned message lets adapters update presentation state.
+    @discardableResult
+    public func receive(line: String) -> ProtocolMessage? {
+        do {
+            let message = try ProtocolMessage.parse(line)
+            receive(message)
+            return message
+        } catch ProtocolMessage.ParseError.unsupportedVersion {
+            send(.error(sequence: 0, code: "VERSION"))
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
     public func receive(_ message: ProtocolMessage) {
         switch message {
         case .hello(let version) where version != 1:
@@ -54,7 +71,7 @@ public final class Reconciler {
     /// Records an observed child-process exit. The process adapter calls this
     /// only for an actual exit event, after it has updated `isRunning`.
     public func childExited() {
-        guard let desiredState, desiredState.state == .on else {
+        guard let desiredState, desiredState.state == .on, !process.isRunning else {
             return
         }
         send(.error(sequence: desiredState.sequence, code: "CHILD_EXIT"))
