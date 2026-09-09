@@ -14,6 +14,7 @@ SwitchController controller;
 char inputBuffer[MAX_RECORD_BYTES + 1];
 size_t inputLength = 0;
 bool inputOverflow = false;
+volatile bool serialConnectionPending = false;
 
 bool switchIsGrounded() {
   const int activeLevel = SWITCH_ACTIVE_LOW ? LOW : HIGH;
@@ -37,19 +38,31 @@ void readSerial() {
   }
 }
 
+void onUsbCdcEvent(void*, esp_event_base_t, int32_t eventId, void*) {
+  if (eventId == ARDUINO_USB_CDC_CONNECTED) serialConnectionPending = true;
+}
+
+void handleSerialConnection(uint32_t nowMs) {
+  if (!serialConnectionPending) return;
+  serialConnectionPending = false;
+  controller.serialConnected(nowMs);
+}
+
 }  // namespace
 
 void setup() {
   pinMode(SWITCH_PIN, INPUT_PULLUP);
   Serial.begin(115200);  // Native USB CDC is enabled by platform build flags.
+  // ESP32 Arduino USB CDC emits this when a host opens the serial connection.
+  Serial.onEvent(onUsbCdcEvent);
   ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQUENCY, LED_PWM_RESOLUTION);
   ledcAttachPin(LED_PIN, LED_PWM_CHANNEL);
-  Serial.print("HELLO 1\n");
 }
 
 void loop() {
   const uint32_t nowMs = millis();
   controller.sample(switchIsGrounded(), nowMs);
+  handleSerialConnection(nowMs);
   readSerial();
   controller.tick(nowMs);
   const std::string outbound = controller.takeOutbound();

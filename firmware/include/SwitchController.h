@@ -13,6 +13,7 @@ class SwitchController {
   static constexpr uint32_t HEARTBEAT_MS = 3000;
 
   void sample(bool grounded, uint32_t nowMs);
+  void serialConnected(uint32_t nowMs);
   void receiveLine(std::string_view line);
   void tick(uint32_t nowMs);
   std::string takeOutbound();
@@ -22,6 +23,7 @@ class SwitchController {
 
  private:
   static bool elapsed(uint32_t nowMs, uint32_t sinceMs, uint32_t intervalMs);
+  void queueHello();
   void queueState(uint32_t nowMs);
   void queuePing(uint32_t nowMs);
 

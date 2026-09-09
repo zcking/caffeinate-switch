@@ -57,6 +57,16 @@ void SwitchController::sample(bool grounded, uint32_t nowMs) {
   }
 }
 
+void SwitchController::serialConnected(uint32_t nowMs) {
+  queueHello();
+  if (!hasStableState_) return;
+
+  // A host reconnect needs the current desired state, but it does not make a
+  // previously confirmed physical state unknown.
+  awaitingAck_ = true;
+  queueState(nowMs);
+}
+
 void SwitchController::receiveLine(std::string_view line) {
   const size_t first = line.find(' ');
   if (first == std::string_view::npos) return;
@@ -114,6 +124,10 @@ uint8_t SwitchController::ledBrightness(uint32_t nowMs) const {
     }
   }
   return 0;
+}
+
+void SwitchController::queueHello() {
+  outbound_ += "HELLO 1\n";
 }
 
 void SwitchController::queueState(uint32_t nowMs) {

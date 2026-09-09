@@ -1,49 +1,83 @@
-#define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <unity.h>
 
+#include "Config.h"
 #include "SwitchController.h"
 
-TEST_CASE("state changes only after 40 ms stable") {
+static_assert(SwitchController::DEBOUNCE_MS == 40);
+static_assert(SwitchController::RETRY_MS == 1000);
+static_assert(SwitchController::HEARTBEAT_MS == 3000);
+static_assert(SWITCH_PIN == 4);
+static_assert(LED_PIN == 5);
+static_assert(SWITCH_ACTIVE_LOW);
+
+void test_state_changes_only_after_40_ms_stable() {
   SwitchController c;
   c.sample(true, 0); c.sample(false, 10); c.sample(true, 20);
-  CHECK(c.takeOutbound().empty());
+  TEST_ASSERT_TRUE(c.takeOutbound().empty());
   c.sample(true, 61);
-  CHECK(c.takeOutbound() == "STATE 1 ON\n");
+  TEST_ASSERT_EQUAL_STRING("STATE 1 ON\n", c.takeOutbound().c_str());
 }
 
-TEST_CASE("stale acknowledgement cannot confirm LED") {
+void test_stale_acknowledgement_cannot_confirm_led() {
   SwitchController c;
   c.sample(true, 0); c.sample(true, 41); c.takeOutbound();
   c.receiveLine("ACK 0 ON");
-  CHECK(c.confirmedState() == ConfirmedState::Unknown);
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Unknown);
 }
 
-TEST_CASE("matching acknowledgement confirms the requested state") {
+void test_matching_acknowledgement_confirms_requested_state() {
   SwitchController c;
   c.sample(false, 0); c.sample(false, 40); c.takeOutbound();
   c.receiveLine("ACK 1 OFF");
-  CHECK(c.confirmedState() == ConfirmedState::Off);
-  CHECK(c.ledBrightness(500) == 0);
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Off);
+  TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(500));
 }
 
-TEST_CASE("pending state retries every second and heartbeats every three seconds") {
+void test_pending_state_retries_every_second_and_heartbeats_every_three_seconds() {
   SwitchController c;
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
   c.tick(999);
-  CHECK(c.takeOutbound().empty());
+  TEST_ASSERT_TRUE(c.takeOutbound().empty());
   c.tick(1000);
-  CHECK(c.takeOutbound() == "STATE 1 ON\n");
+  TEST_ASSERT_EQUAL_STRING("STATE 1 ON\n", c.takeOutbound().c_str());
   c.tick(3000);
-  CHECK(c.takeOutbound() == "STATE 1 ON\nPING 1\n");
+  TEST_ASSERT_EQUAL_STRING("STATE 1 ON\nPING 1\n", c.takeOutbound().c_str());
 }
 
-TEST_CASE("error and unknown LED patterns use the required timing") {
+void test_error_and_unknown_led_patterns_use_required_timing() {
   SwitchController c;
-  CHECK(c.ledBrightness(0) == 0);
-  CHECK(c.ledBrightness(1000) == 255);
+  TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(0));
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(1000));
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
   c.receiveLine("ERROR 1 CHILD_EXIT");
-  CHECK(c.confirmedState() == ConfirmedState::Error);
-  CHECK(c.ledBrightness(124) == 255);
-  CHECK(c.ledBrightness(125) == 0);
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::Error);
+  TEST_ASSERT_EQUAL_UINT8(255, c.ledBrightness(124));
+  TEST_ASSERT_EQUAL_UINT8(0, c.ledBrightness(125));
+}
+
+void test_serial_reconnect_advertises_stable_state_without_resetting_led_confirmation() {
+  SwitchController c;
+  c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
+  c.receiveLine("ACK 1 ON");
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+
+  c.serialConnected(100);
+  TEST_ASSERT_EQUAL_STRING("HELLO 1\nSTATE 1 ON\n", c.takeOutbound().c_str());
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+
+  c.receiveLine("ACK 0 ON");
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+  c.receiveLine("ACK 1 ON");
+  TEST_ASSERT_TRUE(c.confirmedState() == ConfirmedState::On);
+}
+
+int main(int, char**) {
+  UNITY_BEGIN();
+  RUN_TEST(test_state_changes_only_after_40_ms_stable);
+  RUN_TEST(test_stale_acknowledgement_cannot_confirm_led);
+  RUN_TEST(test_matching_acknowledgement_confirms_requested_state);
+  RUN_TEST(test_pending_state_retries_every_second_and_heartbeats_every_three_seconds);
+  RUN_TEST(test_error_and_unknown_led_patterns_use_required_timing);
+  RUN_TEST(test_serial_reconnect_advertises_stable_state_without_resetting_led_confirmation);
+  return UNITY_END();
 }
