@@ -42,9 +42,9 @@ void readSerial() {
 }
 
 void onUsbCdcEvent(void*, esp_event_base_t, int32_t eventId, void*) {
-  if (eventId == ARDUINO_USB_CDC_CONNECTED) {
+  if (eventId == ARDUINO_USB_CDC_CONNECTED_EVENT) {
     serialConnectionEvent.store(1, std::memory_order_relaxed);
-  } else if (eventId == ARDUINO_USB_CDC_DISCONNECTED) {
+  } else if (eventId == ARDUINO_USB_CDC_DISCONNECTED_EVENT) {
     serialConnectionEvent.store(-1, std::memory_order_relaxed);
   }
 }
