@@ -57,19 +57,18 @@ xml_escape() {
 }
 
 render_template() {
-    local escaped_executable
+    local escaped_executable line prefix suffix
     escaped_executable="$(xml_escape "$INSTALLED_EXECUTABLE")"
-    awk -v value="$escaped_executable" '
-        {
-            marker = "__APP_EXECUTABLE__"
-            position = index($0, marker)
-            if (position == 0) {
-                print
-            } else {
-                printf "%s%s%s\n", substr($0, 1, position - 1), value, substr($0, position + length(marker))
-            }
-        }
-    ' "$TEMPLATE"
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            *'__APP_EXECUTABLE__'*)
+                prefix="${line%%__APP_EXECUTABLE__*}"
+                suffix="${line#*__APP_EXECUTABLE__}"
+                printf '%s%s%s\n' "$prefix" "$escaped_executable" "$suffix"
+                ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done < "$TEMPLATE"
 }
 
 if "$dry_run"; then
@@ -91,6 +90,8 @@ mkdir -p "$APPLICATIONS_DIR" "$LAUNCH_AGENTS_DIR"
 if [ -e "$INSTALLED_PLIST" ]; then
     launchctl bootout "gui/$(id -u)" "$INSTALLED_PLIST" 2>/dev/null || true
 fi
+# Replace only this project's installed bundle so stale bundle contents cannot survive an upgrade.
+rm -rf "$INSTALLED_APP"
 ditto "$SOURCE_APP" "$INSTALLED_APP"
 install -m 644 "$rendered_plist" "$INSTALLED_PLIST"
 launchctl bootstrap "gui/$(id -u)" "$INSTALLED_PLIST"

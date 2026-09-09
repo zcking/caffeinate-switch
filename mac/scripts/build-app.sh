@@ -32,7 +32,8 @@ absolute_path() {
 }
 
 BUILD_ROOT="$(absolute_path "${BUILD_ROOT:-$REPO_ROOT/build}")"
-APP_CONTENTS="$BUILD_ROOT/Caffeinate Switch.app/Contents"
+APP_BUNDLE="$BUILD_ROOT/Caffeinate Switch.app"
+APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_EXECUTABLE="$APP_CONTENTS/MacOS/CaffeinateSwitchApp"
 INFO_PLIST="$MAC_DIR/Resources/Info.plist"
 
@@ -57,9 +58,11 @@ BIN_PATH="$(
 RELEASE_EXECUTABLE="$BIN_PATH/CaffeinateSwitchApp"
 [ -f "$RELEASE_EXECUTABLE" ] || die "release executable was not produced: $RELEASE_EXECUTABLE"
 
+# Replace only this project's exact bundle so removed resources cannot survive a rebuild.
+rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_CONTENTS/MacOS" "$APP_CONTENTS/Resources"
 cp "$RELEASE_EXECUTABLE" "$APP_EXECUTABLE"
 cp "$INFO_PLIST" "$APP_CONTENTS/Info.plist"
 plutil -lint "$APP_CONTENTS/Info.plist"
 
-echo "Built: $BUILD_ROOT/Caffeinate Switch.app"
+echo "Built: $APP_BUNDLE"
