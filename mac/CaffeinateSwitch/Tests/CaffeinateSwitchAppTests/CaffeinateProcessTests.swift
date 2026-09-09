@@ -71,6 +71,40 @@ final class CaffeinateProcessTests: XCTestCase {
         XCTAssertFalse(process.isRunning)
     }
 
+    func testObsoleteExitCannotOverwriteReplacementRunningState() throws {
+        let fixtureURL = try makeSignalWaitingFixture()
+        let delivery = QueuedMainDelivery()
+        let process = CaffeinateProcess(
+            executableURL: fixtureURL,
+            deliverOnMain: delivery.enqueue
+        )
+        var observedStates: [Bool] = []
+        var unexpectedExitCount = 0
+        process.onStateChange = { observedStates.append($0) }
+        process.onUnexpectedTermination = { unexpectedExitCount += 1 }
+        defer {
+            process.stop()
+            delivery.runAll()
+        }
+
+        try process.start()
+        XCTAssertEqual(delivery.pendingCount, 1)
+        delivery.runFirst()
+        let oldPID = try XCTUnwrap(process.processIdentifier)
+
+        XCTAssertEqual(kill(oldPID, SIGTERM), 0)
+        XCTAssertTrue(delivery.waitForPendingCount(1, timeout: 3))
+
+        try process.start()
+        XCTAssertEqual(delivery.pendingCount, 2)
+        delivery.runLast() // replacement running
+        delivery.runFirst() // obsolete child exit
+
+        XCTAssertEqual(observedStates, [true, true])
+        XCTAssertEqual(unexpectedExitCount, 1)
+        XCTAssertTrue(process.isRunning)
+    }
+
     private func makeSignalWaitingFixture() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -91,6 +125,51 @@ final class CaffeinateProcessTests: XCTestCase {
             ofItemAtPath: fixtureURL.path
         )
         return fixtureURL
+    }
+}
+
+private final class QueuedMainDelivery {
+    private let lock = NSLock()
+    private var actions: [() -> Void] = []
+
+    var pendingCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return actions.count
+    }
+
+    func enqueue(_ action: @escaping () -> Void) {
+        lock.lock()
+        actions.append(action)
+        lock.unlock()
+    }
+
+    func waitForPendingCount(_ count: Int, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while pendingCount < count, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return pendingCount >= count
+    }
+
+    func runFirst() {
+        lock.lock()
+        let action = actions.removeFirst()
+        lock.unlock()
+        action()
+    }
+
+    func runLast() {
+        lock.lock()
+        let action = actions.removeLast()
+        lock.unlock()
+        action()
+    }
+
+    func runAll() {
+        while pendingCount > 0 {
+            runFirst()
+        }
     }
 }
 
