@@ -30,4 +30,27 @@ final class ProtocolMessageTests: XCTestCase {
         XCTAssertThrowsError(try ProtocolMessage.parse("STATE 7 ON extra"))
         XCTAssertThrowsError(try ProtocolMessage.parse("PING 7\n"))
     }
+
+    func testEncodingCanonicalizesInvalidConstructibleValues() throws {
+        let unsupportedHello = ProtocolMessage.hello(version: 2).encoded
+        XCTAssertEqual(unsupportedHello, "HELLO 1")
+        XCTAssertEqual(try ProtocolMessage.parse(unsupportedHello), .hello(version: 1))
+
+        let whitespaceCode = ProtocolMessage.error(sequence: 7, code: "BAD CODE").encoded
+        XCTAssertEqual(whitespaceCode, "ERROR 7 BAD_CODE")
+        XCTAssertEqual(
+            try ProtocolMessage.parse(whitespaceCode),
+            .error(sequence: 7, code: "BAD_CODE")
+        )
+    }
+
+    func testEncodingLimitsConstructibleErrorRecordsTo256Bytes() throws {
+        let encoded = ProtocolMessage.error(
+            sequence: UInt64.max,
+            code: String(repeating: "x", count: 300)
+        ).encoded
+
+        XCTAssertLessThanOrEqual(encoded.utf8.count, 256)
+        XCTAssertNoThrow(try ProtocolMessage.parse(encoded))
+    }
 }

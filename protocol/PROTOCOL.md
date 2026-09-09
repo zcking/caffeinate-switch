@@ -3,7 +3,10 @@
 The firmware and Mac agent exchange UTF-8 records over USB CDC serial. Each
 record is ASCII text terminated by a single newline (`\n`). A record, excluding
 its terminator, must be at most 256 bytes. `ProtocolMessage.encoded` represents
-the record without that newline.
+the record without that newline. Because `ProtocolMessage` cases are public,
+the encoder canonicalizes constructible invalid values: every `HELLO` encodes
+as version `1`, and error-code whitespace becomes `_`; an error code is also
+truncated as needed to keep its complete record within 256 bytes.
 
 ## Records
 

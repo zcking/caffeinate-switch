@@ -72,8 +72,8 @@ public enum ProtocolMessage: Equatable {
 
     public var encoded: String {
         switch self {
-        case .hello(let version):
-            return "HELLO \(version)"
+        case .hello:
+            return "HELLO 1"
         case .state(let sequence, let state):
             return "STATE \(sequence) \(state.encoded)"
         case .ping(let sequence):
@@ -81,8 +81,25 @@ public enum ProtocolMessage: Equatable {
         case .ack(let sequence, let state):
             return "ACK \(sequence) \(state.encoded)"
         case .error(let sequence, let code):
-            return "ERROR \(sequence) \(code)"
+            let prefix = "ERROR \(sequence) "
+            return prefix + Self.safeErrorCode(code, maximumByteCount: 256 - prefix.utf8.count)
         }
+    }
+
+    private static func safeErrorCode(_ code: String, maximumByteCount: Int) -> String {
+        let normalized = code.map { $0.isWhitespace ? "_" : String($0) }.joined()
+        let nonemptyCode = normalized.isEmpty ? "INVALID" : normalized
+        var result = ""
+
+        for character in nonemptyCode {
+            let characterString = String(character)
+            guard result.utf8.count + characterString.utf8.count <= maximumByteCount else {
+                break
+            }
+            result.append(character)
+        }
+
+        return result.isEmpty ? "INVALID" : result
     }
 
     private static func parseSequence(_ value: String) throws -> UInt64 {
