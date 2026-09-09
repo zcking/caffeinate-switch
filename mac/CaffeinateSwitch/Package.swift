@@ -14,6 +14,9 @@ let package = Package(
         .target(name: "SwitchCore"),
         .executableTarget(name: "CaffeinateSwitchApp", dependencies: ["SwitchCore"]),
         .testTarget(name: "SwitchCoreTests", dependencies: ["SwitchCore"]),
-        .testTarget(name: "CaffeinateSwitchAppTests", dependencies: ["CaffeinateSwitchApp"]),
+        .testTarget(
+            name: "CaffeinateSwitchAppTests",
+            dependencies: ["CaffeinateSwitchApp", "SwitchCore"]
+        ),
     ]
 )

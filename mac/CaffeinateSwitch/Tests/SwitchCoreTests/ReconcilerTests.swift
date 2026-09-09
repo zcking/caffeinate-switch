@@ -64,13 +64,28 @@ final class ReconcilerTests: XCTestCase {
         XCTAssertFalse(process.isRunning)
     }
 
-    func testReconnectCancelsPendingDisconnectCleanup() {
+    func testSerialOpenWithoutStateDoesNotCancelPendingDisconnectCleanup() {
         let scheduler = FakeScheduler()
         let process = FakeProcess(running: true)
         let reconciler = Reconciler(process: process, scheduler: scheduler)
 
         reconciler.serialDisconnected()
         reconciler.serialConnected()
+        reconciler.receive(.hello(version: 1))
+        reconciler.receive(.ping(sequence: 1))
+        scheduler.advance(by: 10)
+
+        XCTAssertFalse(process.isRunning)
+    }
+
+    func testValidStateResynchronizationCancelsPendingDisconnectCleanup() {
+        let scheduler = FakeScheduler()
+        let process = FakeProcess(running: true)
+        let reconciler = Reconciler(process: process, scheduler: scheduler)
+
+        reconciler.serialDisconnected()
+        reconciler.serialConnected()
+        reconciler.receive(.state(sequence: 2, state: .on))
         scheduler.advance(by: 10)
 
         XCTAssertTrue(process.isRunning)

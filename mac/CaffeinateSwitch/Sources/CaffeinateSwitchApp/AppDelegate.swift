@@ -43,10 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMenu()
         reconciler.send = { [weak self] message in self?.send(message) }
+        process.onStateChange = { [weak self] isRunning in
+            self?.processItem.title = isRunning ? "Process: running" : "Process: stopped"
+        }
         process.onUnexpectedTermination = { [weak self] in
-            guard let self else { return }
-            self.reconciler.childExited()
-            self.updateProcessStatus()
+            self?.reconciler.childExited()
         }
         connectNow(resetBackoff: true)
     }
@@ -138,7 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rockerItem.title = "Rocker: \(state == .on ? "on" : "off")"
         }
         reconciler.receive(message)
-        updateProcessStatus()
     }
 
     private func send(_ message: ProtocolMessage) {
@@ -147,7 +147,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             deviceItem.title = "Device: disconnected"
         }
-        updateProcessStatus()
     }
 
     private func serialDisconnected(generation: Int) {
@@ -177,10 +176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
-    private func updateProcessStatus() {
-        processItem.title = process.isRunning ? "Process: running" : "Process: stopped"
-    }
-
     private func cleanUp() {
         guard !isTerminating else { return }
         isTerminating = true
@@ -189,6 +184,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         serial?.close()
         serial = nil
         process.stop()
-        updateProcessStatus()
     }
 }

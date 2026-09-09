@@ -8,6 +8,8 @@ final class CaffeinateProcess: ChildProcessManaging {
     private var expectedTermination: ObjectIdentifier?
 
     var onUnexpectedTermination: () -> Void = {}
+    /// Runs on the main thread after a process transition is verified.
+    var onStateChange: (Bool) -> Void = { _ in }
 
     init(executableURL: URL = URL(fileURLWithPath: "/usr/bin/caffeinate")) {
         self.executableURL = executableURL
@@ -46,6 +48,9 @@ final class CaffeinateProcess: ChildProcessManaging {
 
         do {
             try child.run()
+            if child.isRunning {
+                notifyStateChange(true)
+            }
         } catch {
             lock.lock()
             if process === child {
@@ -78,6 +83,7 @@ final class CaffeinateProcess: ChildProcessManaging {
         expectedTermination = nil
         child.terminationHandler = nil
         lock.unlock()
+        notifyStateChange(false)
     }
 
     private func didTerminate(_ child: Process) {
@@ -87,11 +93,30 @@ final class CaffeinateProcess: ChildProcessManaging {
         if wasOwned {
             process = nil
         }
-        let callback = onUnexpectedTermination
+        let unexpectedTerminationCallback = onUnexpectedTermination
+        let stateChangeCallback = onStateChange
         lock.unlock()
 
         guard wasOwned, !wasExpected else { return }
-        DispatchQueue.main.async(execute: callback)
+        performOnMain {
+            stateChangeCallback(false)
+            unexpectedTerminationCallback()
+        }
+    }
+
+    private func notifyStateChange(_ isRunning: Bool) {
+        lock.lock()
+        let callback = onStateChange
+        lock.unlock()
+        performOnMain { callback(isRunning) }
+    }
+
+    private func performOnMain(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
     }
 
     deinit {

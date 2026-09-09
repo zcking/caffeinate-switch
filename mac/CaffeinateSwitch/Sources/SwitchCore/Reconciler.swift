@@ -9,6 +9,7 @@ public final class Reconciler {
     private let scheduler: any Scheduler
     private var desiredState: (sequence: UInt64, state: SwitchState)?
     private var disconnectCleanup: (any Cancellable)?
+    private var awaitingStateResynchronization = false
 
     public init(process: any ChildProcessManaging, scheduler: any Scheduler) {
         self.process = process
@@ -20,6 +21,7 @@ public final class Reconciler {
         case .hello(let version) where version != 1:
             send(.error(sequence: 0, code: "VERSION"))
         case .state(let sequence, let state):
+            confirmStateResynchronization()
             desiredState = (sequence, state)
             reconcile(sequence: sequence, desiredState: state)
         case .hello, .ping, .ack, .error:
@@ -28,16 +30,25 @@ public final class Reconciler {
     }
 
     public func serialConnected() {
-        disconnectCleanup?.cancel()
-        disconnectCleanup = nil
+        // An open descriptor is not proof that the current rocker state was
+        // received. Keep any disconnect cleanup armed until a valid STATE.
+        awaitingStateResynchronization = true
     }
 
     public func serialDisconnected() {
+        awaitingStateResynchronization = true
         disconnectCleanup?.cancel()
         disconnectCleanup = scheduler.schedule(after: 10) { [weak self] in
             self?.disconnectCleanup = nil
             self?.process.stop()
         }
+    }
+
+    private func confirmStateResynchronization() {
+        guard awaitingStateResynchronization else { return }
+        awaitingStateResynchronization = false
+        disconnectCleanup?.cancel()
+        disconnectCleanup = nil
     }
 
     /// Records an observed child-process exit. The process adapter calls this

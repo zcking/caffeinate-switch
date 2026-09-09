@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import SwitchCore
 import XCTest
 @testable import CaffeinateSwitchApp
 
@@ -49,6 +50,27 @@ final class CaffeinateProcessTests: XCTestCase {
         XCTAssertNil(process.processIdentifier)
     }
 
+    func testGraceTimerStopPublishesStoppedProcessState() throws {
+        let fixtureURL = try makeSignalWaitingFixture()
+        let process = CaffeinateProcess(executableURL: fixtureURL)
+        let scheduler = TestScheduler()
+        let reconciler = Reconciler(process: process, scheduler: scheduler)
+        var observedStates: [Bool] = []
+        var callbacksWereOnMainThread: [Bool] = []
+        process.onStateChange = {
+            observedStates.append($0)
+            callbacksWereOnMainThread.append(Thread.isMainThread)
+        }
+
+        try process.start()
+        reconciler.serialDisconnected()
+        scheduler.advance(by: 10)
+
+        XCTAssertEqual(observedStates, [true, false])
+        XCTAssertEqual(callbacksWereOnMainThread, [true, true])
+        XCTAssertFalse(process.isRunning)
+    }
+
     private func makeSignalWaitingFixture() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -69,6 +91,42 @@ final class CaffeinateProcessTests: XCTestCase {
             ofItemAtPath: fixtureURL.path
         )
         return fixtureURL
+    }
+}
+
+private final class TestScheduler: Scheduler {
+    private final class Token: Cancellable {
+        var isCancelled = false
+
+        func cancel() {
+            isCancelled = true
+        }
+    }
+
+    private struct ScheduledAction {
+        let deadline: Double
+        let token: Token
+        let action: () -> Void
+    }
+
+    private var now: Double = 0
+    private var actions: [ScheduledAction] = []
+
+    func schedule(after delay: Double, _ action: @escaping () -> Void) -> any Cancellable {
+        let token = Token()
+        actions.append(ScheduledAction(deadline: now + delay, token: token, action: action))
+        return token
+    }
+
+    func advance(by interval: Double) {
+        now += interval
+        let dueActions = actions.enumerated().filter { $0.element.deadline <= now }
+        for (index, scheduled) in dueActions.reversed() {
+            actions.remove(at: index)
+            if !scheduled.token.isCancelled {
+                scheduled.action()
+            }
+        }
     }
 }
 
