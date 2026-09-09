@@ -33,8 +33,6 @@ absolute_path() {
 
 BUILD_ROOT="$(absolute_path "${BUILD_ROOT:-$REPO_ROOT/build}")"
 APP_BUNDLE="$BUILD_ROOT/Caffeinate Switch.app"
-APP_CONTENTS="$APP_BUNDLE/Contents"
-APP_EXECUTABLE="$APP_CONTENTS/MacOS/CaffeinateSwitchApp"
 INFO_PLIST="$MAC_DIR/Resources/Info.plist"
 
 [ -d "$PACKAGE_DIR" ] || die "Swift package directory is missing: $PACKAGE_DIR"
@@ -58,11 +56,43 @@ BIN_PATH="$(
 RELEASE_EXECUTABLE="$BIN_PATH/CaffeinateSwitchApp"
 [ -f "$RELEASE_EXECUTABLE" ] || die "release executable was not produced: $RELEASE_EXECUTABLE"
 
-# Replace only this project's exact bundle so removed resources cannot survive a rebuild.
-rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_CONTENTS/MacOS" "$APP_CONTENTS/Resources"
-cp "$RELEASE_EXECUTABLE" "$APP_EXECUTABLE"
-cp "$INFO_PLIST" "$APP_CONTENTS/Info.plist"
-plutil -lint "$APP_CONTENTS/Info.plist"
+mkdir -p "$BUILD_ROOT"
+STAGED_APP="$(mktemp -d "$BUILD_ROOT/.Caffeinate Switch.app.staging.XXXXXX")"
+BACKUP_APP="${STAGED_APP}.previous"
+new_bundle_installed=false
+
+cleanup_staged_bundle() {
+    local status=$?
+    trap - EXIT
+
+    if [ -e "$BACKUP_APP" ]; then
+        if "$new_bundle_installed"; then
+            rm -rf "$BACKUP_APP"
+        elif [ ! -e "$APP_BUNDLE" ]; then
+            mv "$BACKUP_APP" "$APP_BUNDLE" || \
+                echo "Error: could not restore previous bundle: $BACKUP_APP" >&2
+        else
+            echo "Error: preserving previous bundle at $BACKUP_APP after incomplete swap" >&2
+        fi
+    fi
+    [ ! -e "$STAGED_APP" ] || rm -rf "$STAGED_APP"
+    exit "$status"
+}
+trap cleanup_staged_bundle EXIT
+
+STAGED_CONTENTS="$STAGED_APP/Contents"
+mkdir -p "$STAGED_CONTENTS/MacOS" "$STAGED_CONTENTS/Resources"
+cp "$RELEASE_EXECUTABLE" "$STAGED_CONTENTS/MacOS/CaffeinateSwitchApp"
+cp "$INFO_PLIST" "$STAGED_CONTENTS/Info.plist"
+plutil -lint "$STAGED_CONTENTS/Info.plist"
+
+# Both directories are siblings on one filesystem. Preserve the old bundle until the staged bundle is valid.
+if [ -e "$APP_BUNDLE" ]; then
+    mv "$APP_BUNDLE" "$BACKUP_APP"
+fi
+mv "$STAGED_APP" "$APP_BUNDLE"
+new_bundle_installed=true
+[ ! -e "$BACKUP_APP" ] || rm -rf "$BACKUP_APP"
+trap - EXIT
 
 echo "Built: $APP_BUNDLE"

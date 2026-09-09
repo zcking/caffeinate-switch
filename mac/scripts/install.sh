@@ -81,20 +81,51 @@ fi
 bash "$SCRIPT_DIR/build-app.sh"
 [ -d "$SOURCE_APP" ] || die "application bundle was not produced: $SOURCE_APP"
 
-rendered_plist="$(mktemp "${TMPDIR:-/tmp}/com.zachking.CaffeinateSwitch.XXXXXX.plist")"
-trap 'rm -f "$rendered_plist"' EXIT
-render_template > "$rendered_plist"
-plutil -lint "$rendered_plist"
-
 mkdir -p "$APPLICATIONS_DIR" "$LAUNCH_AGENTS_DIR"
+STAGED_APP="$(mktemp -d "$APPLICATIONS_DIR/.Caffeinate Switch.app.staging.XXXXXX")"
+STAGED_PLIST="$(mktemp "$LAUNCH_AGENTS_DIR/.com.zachking.CaffeinateSwitch.plist.staging.XXXXXX")"
+BACKUP_APP="${STAGED_APP}.previous"
+new_bundle_installed=false
+
+cleanup_staged_install() {
+    local status=$?
+    trap - EXIT
+    rm -f "$STAGED_PLIST"
+
+    if [ -e "$BACKUP_APP" ]; then
+        if "$new_bundle_installed"; then
+            rm -rf "$BACKUP_APP"
+        elif [ ! -e "$INSTALLED_APP" ]; then
+            mv "$BACKUP_APP" "$INSTALLED_APP" || \
+                echo "Error: could not restore previous bundle: $BACKUP_APP" >&2
+        else
+            echo "Error: preserving previous bundle at $BACKUP_APP after incomplete swap" >&2
+        fi
+    fi
+    [ ! -e "$STAGED_APP" ] || rm -rf "$STAGED_APP"
+    exit "$status"
+}
+trap cleanup_staged_install EXIT
+
+# Stage and validate both replacements before unloading or replacing the existing login application.
+ditto "$SOURCE_APP" "$STAGED_APP"
+plutil -lint "$STAGED_APP/Contents/Info.plist"
+render_template > "$STAGED_PLIST"
+plutil -lint "$STAGED_PLIST"
+chmod 644 "$STAGED_PLIST"
+
 if [ -e "$INSTALLED_PLIST" ]; then
     launchctl bootout "gui/$(id -u)" "$INSTALLED_PLIST" 2>/dev/null || true
 fi
-# Replace only this project's installed bundle so stale bundle contents cannot survive an upgrade.
-rm -rf "$INSTALLED_APP"
-ditto "$SOURCE_APP" "$INSTALLED_APP"
-install -m 644 "$rendered_plist" "$INSTALLED_PLIST"
+if [ -e "$INSTALLED_APP" ]; then
+    mv "$INSTALLED_APP" "$BACKUP_APP"
+fi
+mv "$STAGED_APP" "$INSTALLED_APP"
+new_bundle_installed=true
+[ ! -e "$BACKUP_APP" ] || rm -rf "$BACKUP_APP"
+mv "$STAGED_PLIST" "$INSTALLED_PLIST"
 launchctl bootstrap "gui/$(id -u)" "$INSTALLED_PLIST"
+trap - EXIT
 
 echo "Installed: $INSTALLED_APP"
 echo "Loaded: $INSTALLED_PLIST"
