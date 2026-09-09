@@ -1,2 +1,7 @@
 .worktrees/
 .superpowers/
+.build/
+.pio/
+build/
+*.stl
+.DS_Store
