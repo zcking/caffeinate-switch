@@ -18,6 +18,9 @@ grep -Fq 'assert(roof_radial_run <= roof_height + 0.001,' "$model"
 grep -Fq 'rocker_open[0] > 0 && rocker_open[1] > 0,' "$model"
 grep -Fq 'rocker_open[0] > 2 * rocker_corner_radius' "$model"
 grep -Fq 'rocker_open[0] + 2 * rocker_surround <= inner[0]' "$model"
+grep -Fq 'board_fit = 0.80;' "$model"
+grep -Fq 'roof_support = [board[0] + 2 * board_fit, board[1] + 2 * board_fit];' "$model"
+grep -Fq 'rail_inner = board[0] / 2 + board_fit;' "$model"
 grep -Fq 'light_baffle = max(wall / 2, 1.2);' "$model"
 grep -Fq 'insert_rear_y = steam_track_y + steam_track_depth;' "$model"
 grep -Fq 'light_chamber_rear_y = insert_rear_y + light_baffle;' "$model"
@@ -43,7 +46,7 @@ awk '
   }
   BEGIN {
     exterior_x = 72; exterior_y = 68; exterior_z = 44; eps = 0.02
-    wall = 2.4; fit = 0.30; base_thickness = 2.4
+    wall = 2.4; fit = 0.30; board_fit = 0.80; base_thickness = 2.4
     rocker_x = 8.8 + 2 * fit; rocker_y = 14 + 2 * fit
     inner_x = exterior_x - 2 * wall; inner_y = exterior_y - 2 * wall
     rocker_surround = wall
@@ -52,7 +55,9 @@ awk '
     if (rocker_valid(-1 + 2 * fit, rocker_y, inner_x, inner_y, rocker_surround, rocker_corner_radius)) fail("negative rocker override was accepted")
     if (rocker_valid(0.6, rocker_y, inner_x, inner_y, rocker_surround, rocker_corner_radius)) fail("undersize rocker override was accepted")
     if (rocker_valid(inner_x - 2 * rocker_surround + 0.01, rocker_y, inner_x, inner_y, rocker_surround, rocker_corner_radius)) fail("oversize rocker override was accepted")
-    roof_support_x = 27.2 + 2 * fit; roof_support_y = 51.4 + 2 * fit
+    roof_support_x = 27.2 + 2 * board_fit; roof_support_y = 51.4 + 2 * board_fit
+    rail_inner = 27.2 / 2 + board_fit
+    if (rail_inner != 14.4) fail("PCB rails do not provide 0.8 mm clearance per side")
     lower_x_run = (inner_x - roof_support_x) / 2; lower_y_run = (inner_y - roof_support_y) / 2
     lower_height = sqrt(lower_x_run ^ 2 + lower_y_run ^ 2)
     roof_x_run = (roof_support_x - rocker_x) / 2; roof_y_run = (roof_support_y - rocker_y) / 2

@@ -31,6 +31,7 @@ The principal defaults are:
 | `exterior` | `[72, 68, 44]` | finished shell width, depth, height |
 | `wall` | `2.4` | nominal walls, top, and recessed base thickness |
 | `fit` | `0.30` | clearance per mating side |
+| `board_fit` | `0.80` | PCB rail clearance per side |
 | `board` | `[27.2, 51.4]` | PCB width and length |
 | `rocker` | `[8.8, 14]` | measured rocker body |
 | `usb` | `[13, 10]` | support-free cable opening envelope |
@@ -41,7 +42,9 @@ Openings add `fit` on every side, so the default rocker aperture is 9.4 ×
 It is exactly 3 mm thick and puts both production openings in one small plate,
 allowing the rocker snap fit, cable-overmould access, shrinkage, hole width,
 and printed panel thickness to be checked before committing to the shell.
-Override `fit`, `rocker`, `usb`, or `usb_center_z` from the command line after
+The PCB rails use the independent `board_fit` value, so tuning board retention
+does not alter the proven rocker, USB, base, or steam-insert fits. Override
+`fit`, `board_fit`, `rocker`, `usb`, or `usb_center_z` from the command line after
 measuring the coupon and actual hardware.
 
 ## Print orientation

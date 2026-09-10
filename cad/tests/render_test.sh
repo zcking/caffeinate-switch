@@ -16,6 +16,7 @@ grep -Fq 'rocker = [8.8, 14];' "$model"
 grep -Fq 'exterior = [72, 68, 44];' "$model"
 grep -Fq 'wall = 2.4;' "$model"
 grep -Fq 'fit = 0.30;' "$model"
+grep -Fq 'board_fit = 0.80;' "$model"
 for selector in shell base steam coupon; do
   grep -Fq "part == \"$selector\"" "$model"
 done

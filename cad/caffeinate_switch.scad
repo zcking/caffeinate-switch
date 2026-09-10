@@ -7,6 +7,7 @@ rocker = [8.8, 14];             // measured panel opening width, length
 exterior = [72, 68, 44];        // width, depth, height
 wall = 2.4;
 fit = 0.30;                     // clearance on each mating side
+board_fit = 0.80;               // PCB rail clearance on each side
 
 usb_center_z = 10.5;
 usb = [13, 10];                 // cable opening width and overall height
@@ -79,7 +80,7 @@ steam_seal_height = steam_center_z - steam_flange[1] / 2
                     - fit - base_thickness;
 // This intermediate cavity fits the board, allowing both tapered stages to
 // bound their *radial* corner run as well as their X/Y runs.
-roof_support = [board[0] + 2 * fit, board[1] + 2 * fit];
+roof_support = [board[0] + 2 * board_fit, board[1] + 2 * board_fit];
 lower_roof_x_run = (inner[0] - roof_support[0]) / 2;
 lower_roof_y_run = (inner[1] - roof_support[1]) / 2;
 lower_roof_radial_run = sqrt(
@@ -94,6 +95,7 @@ roof_start_z = lower_roof_height;
 roof_height = exterior[2] - wall - roof_start_z;
 
 assert(wall >= 2.4, "wall must be at least 2.4 mm");
+assert(board_fit >= 0, "board clearance must not be negative");
 assert(exterior[0] > board[0] + 2 * wall);
 assert(exterior[1] > board[1] + 2 * wall);
 assert(rocker_open[0] > 0 && rocker_open[1] > 0,
@@ -305,7 +307,7 @@ module insert_track() {
 // Three clips on each side form two segmented PCB edge rails. They rise from
 // the base, flex independently, and avoid relying on unknown mounting holes.
 module board_rail(right = true) {
-    rail_inner = board[0] / 2 + fit;
+    rail_inner = board[0] / 2 + board_fit;
     rail_outer = rail_inner + 1.8;
     wedge = 0.9;
     clip_length = 9;
