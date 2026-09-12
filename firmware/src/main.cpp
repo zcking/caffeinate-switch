@@ -5,6 +5,10 @@
 #include "Config.h"
 #include "SwitchController.h"
 
+#ifndef CAFFEINATE_NATIVE_USB_CDC
+#define CAFFEINATE_NATIVE_USB_CDC 0
+#endif
+
 namespace {
 
 constexpr uint8_t LED_PWM_CHANNEL = 0;
@@ -18,6 +22,12 @@ size_t inputLength = 0;
 bool inputOverflow = false;
 // 1 means connected, -1 means disconnected, and 0 means no pending event.
 std::atomic<int8_t> serialConnectionEvent{0};
+#if !CAFFEINATE_NATIVE_USB_CDC
+// USB-UART boards typically auto-reset when the host opens the port, so the
+// first loop after boot is treated as session start. Host-side disconnect is
+// handled by the Mac agent; the bridge does not emit CDC connect events.
+bool pendingUartSessionStart = true;
+#endif
 
 bool switchIsGrounded() {
   const int activeLevel = SWITCH_ACTIVE_LOW ? LOW : HIGH;
@@ -41,6 +51,7 @@ void readSerial() {
   }
 }
 
+#if CAFFEINATE_NATIVE_USB_CDC
 void onUsbCdcEvent(void*, esp_event_base_t, int32_t eventId, void*) {
   if (eventId == ARDUINO_USB_CDC_CONNECTED_EVENT) {
     serialConnectionEvent.store(1, std::memory_order_relaxed);
@@ -48,8 +59,15 @@ void onUsbCdcEvent(void*, esp_event_base_t, int32_t eventId, void*) {
     serialConnectionEvent.store(-1, std::memory_order_relaxed);
   }
 }
+#endif
 
 void handleSerialConnection(uint32_t nowMs) {
+#if !CAFFEINATE_NATIVE_USB_CDC
+  if (pendingUartSessionStart) {
+    pendingUartSessionStart = false;
+    serialConnectionEvent.store(1, std::memory_order_relaxed);
+  }
+#endif
   const int8_t event = serialConnectionEvent.exchange(0, std::memory_order_relaxed);
   if (event > 0) {
     controller.serialConnected(nowMs);
@@ -62,9 +80,12 @@ void handleSerialConnection(uint32_t nowMs) {
 
 void setup() {
   pinMode(SWITCH_PIN, INPUT_PULLUP);
-  Serial.begin(115200);  // Native USB CDC is enabled by platform build flags.
+  Serial.begin(115200);
+#if CAFFEINATE_NATIVE_USB_CDC
+  // Native USB CDC is enabled by platform build flags.
   // ESP32 Arduino USB CDC emits this when a host opens the serial connection.
   Serial.onEvent(onUsbCdcEvent);
+#endif
   ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQUENCY, LED_PWM_RESOLUTION);
   ledcAttachPin(LED_PIN, LED_PWM_CHANNEL);
 }

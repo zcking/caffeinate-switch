@@ -74,7 +74,7 @@ void SwitchController::serialDisconnected() {
   awaitingAck_ = false;
   confirmedState_ = ConfirmedState::Unknown;
 
-  // Nothing already queued can reach the closed CDC session.  Reconnection
+  // Nothing already queued can reach the closed serial session.  Reconnection
   // starts a fresh session with HELLO followed by the current stable state.
   outbound_.clear();
 }

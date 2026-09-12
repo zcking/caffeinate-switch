@@ -1,12 +1,13 @@
 # Caffeinate Switch serial protocol
 
-The firmware and Mac agent exchange UTF-8 records over USB CDC serial. Each
-record is ASCII text terminated by a single newline (`\n`). A record, excluding
-its terminator, must be at most 256 bytes. `ProtocolMessage.encoded` represents
-the record without that newline. Because `ProtocolMessage` cases are public,
-the encoder canonicalizes constructible invalid values: every `HELLO` encodes
-as version `1`, and error-code whitespace becomes `_`; an error code is also
-truncated as needed to keep its complete record within 256 bytes.
+The firmware and Mac agent exchange UTF-8 records over USB serial (native USB
+CDC on ESP32-S3, or a USB-UART bridge on classic ESP32). Each record is ASCII
+text terminated by a single newline (`\n`). A record, excluding its terminator,
+must be at most 256 bytes. `ProtocolMessage.encoded` represents the record
+without that newline. Because `ProtocolMessage` cases are public, the encoder
+canonicalizes constructible invalid values: every `HELLO` encodes as version
+`1`, and error-code whitespace becomes `_`; an error code is also truncated as
+needed to keep its complete record within 256 bytes.
 
 ## Records
 
@@ -44,4 +45,7 @@ retries that same record every second until it receives an `ACK` with the same
 sequence and state. Sequence matching prevents stale acknowledgements from
 confirming the switch. Firmware sends `PING` heartbeats every three seconds.
 After a USB reconnect, firmware reconciles from the current physical rocker
-state. Receivers safely ignore malformed or oversized records.
+state. On ESP32-S3, reconnect is observed via native USB CDC events. On classic
+ESP32 USB-UART boards, opening the host serial port typically resets the MCU,
+which starts a fresh session the same way. Receivers safely ignore malformed or
+oversized records.

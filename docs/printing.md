@@ -12,7 +12,9 @@ If the coupon is too tight or loose, measure the actual rocker, cable, and
 board, then adjust the OpenSCAD `fit`, `rocker`, `usb`, or `usb_center_z`
 parameters. Also record any board-specific USB-opening correction before the
 final shell. The design defaults are a 72 x 68 x 44 mm shell, a 27.2 x 51.4 mm
-board, an 8.8 x 14 mm rocker, and 0.30 mm clearance per mating side.
+board (ESP32-S3 DevKitC footprint; classic DevKit V1 boards often need different
+`board` / `usb` parameters), an 8.8 x 14 mm rocker, and 0.30 mm clearance per
+mating side.
 
 Print the opaque shell and base in opaque PLA so the LED pocket does not leak
 light. Change to translucent PLA only for the separate steam insert. Use a
@@ -29,13 +31,14 @@ screws only after checking their engagement in the base bosses.
 ## Firmware and Mac setup
 
 Install PlatformIO with an ESP32 Arduino-capable environment, then build and,
-only when the correct board is connected, upload:
+only when the correct board is connected, upload with the matching environment:
 
 ```bash
 cd firmware
 pio test -e native
-pio run -e esp32-s3-devkitc-1
-pio run -e esp32-s3-devkitc-1 -t upload
+pio run -e esp32-s3-devkitc-1 -e esp32dev
+pio run -e esp32-s3-devkitc-1 -t upload   # ESP32-S3 DevKitC-1
+pio run -e esp32dev -t upload             # classic ESP32 DevKit / ESP-WROOM-32
 ```
 
 `pio run -t upload` changes the attached board; it is intentionally not run by
@@ -49,8 +52,8 @@ per-user login LaunchAgent, run `bash mac/scripts/install.sh`; to remove only
 that app and LaunchAgent, run `bash mac/scripts/uninstall.sh`. Installation is
 never automatic.
 
-The agent discovers `/dev/cu.usbmodem*` automatically. To override that
-selection for a board that exposes a different `/dev/cu.*` device, run:
+The agent discovers `/dev/cu.usbmodem*` (native USB CDC) first, then common
+USB-UART names such as `/dev/cu.usbserial*`. To override that selection, run:
 
 ```bash
 defaults write com.zachking.CaffeinateSwitch SerialDevicePath -string /dev/cu.YOUR_DEVICE

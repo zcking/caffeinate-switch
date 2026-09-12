@@ -55,9 +55,9 @@ app-build-test:
 	@echo "PASS: direct app-build regressions."
 
 firmware:
-	@set -e; if ! command -v "$(PIO)" >/dev/null 2>&1; then echo "SKIP: PlatformIO is not installed; ESP32-S3 firmware was not built."; exit 0; fi; \
-	(cd firmware && "$(PIO)" run -e esp32-s3-devkitc-1); \
-	echo "PASS: ESP32-S3 firmware build completed (not flashed)."
+	@set -e; if ! command -v "$(PIO)" >/dev/null 2>&1; then echo "SKIP: PlatformIO is not installed; ESP32 firmware was not built."; exit 0; fi; \
+	(cd firmware && "$(PIO)" run -e esp32-s3-devkitc-1 -e esp32dev); \
+	echo "PASS: ESP32-S3 and ESP32 firmware builds completed (not flashed)."
 
 app:
 	@set -e; if ! command -v "$(SWIFTC)" >/dev/null 2>&1 || ! command -v "$(XCRUN)" >/dev/null 2>&1; then echo "SKIP: macOS app build requires swiftc and xcrun."; exit 0; fi; \

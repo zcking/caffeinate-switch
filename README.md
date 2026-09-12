@@ -1,9 +1,9 @@
 # Caffeinate Switch
 
 A USB desk rocker switch that asks a Mac menu-bar agent to own one
-`caffeinate` process. The ESP32-S3 reports the physical switch state over USB
-CDC; the amber steam LED becomes solid only after the Mac confirms the owned
-process is running.
+`caffeinate` process. An ESP32-S3 (native USB CDC) or classic ESP32 DevKit
+(USB-UART) reports the physical switch state over serial; the amber steam LED
+becomes solid only after the Mac confirms the owned process is running.
 
 Read [the wiring and power-safety guide](docs/wiring.md) before connecting the
 board, [the printing and assembly guide](docs/printing.md) before producing the
@@ -23,9 +23,10 @@ make stl
 
 `make test` runs the SwiftPM XCTest suite when Swift is installed, PlatformIO
 native tests, installer tests, and CAD checks. `make firmware` compiles the
-ESP32-S3 image; `make app` creates `build/Caffeinate Switch.app`; and `make
-stl` exports the four parts to `build/stl/`. None of these targets flashes a
-board, installs a login item, or launches the application.
+ESP32-S3 and classic ESP32 images; `make app` creates
+`build/Caffeinate Switch.app`; and `make stl` exports the four parts to
+`build/stl/`. None of these targets flashes a board, installs a login item, or
+launches the application.
 
 PlatformIO and OpenSCAD are optional local tools. When either is unavailable,
 the corresponding target prints `SKIP:` with the reason and exits successfully;
@@ -39,8 +40,10 @@ To perform actions that change a device or the Mac, run them explicitly after a
 successful build:
 
 ```bash
-# Flash only the selected, connected ESP32-S3 board.
-cd firmware && pio run -e esp32-s3-devkitc-1 -t upload
+# Flash only the selected, connected board (pick the matching environment).
+cd firmware
+pio run -e esp32-s3-devkitc-1 -t upload   # ESP32-S3 DevKitC-1
+pio run -e esp32dev -t upload             # classic ESP32 DevKit / ESP-WROOM-32
 
 # Build and manage the per-user menu-bar application and LaunchAgent.
 bash mac/scripts/build-app.sh
@@ -52,4 +55,5 @@ The normal macOS scripts use SwiftPM and place the application in
 `~/Applications`; install also registers only
 `com.zachking.CaffeinateSwitch.plist` as a login LaunchAgent. See
 [docs/printing.md](docs/printing.md) for the serial-device override and the
-complete setup sequence.
+complete setup sequence. The enclosure defaults target an ESP32-S3 DevKitC
+footprint; classic DevKit boards may need CAD parameter changes.

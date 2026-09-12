@@ -38,10 +38,11 @@ void test_matching_acknowledgement_confirms_requested_state() {
 void test_pending_state_retries_every_second_and_heartbeats_every_three_seconds() {
   SwitchController c;
   c.serialConnected(0); c.takeOutbound();
+  // Debounce completes at t=40, which is also lastStateSentMs_ for the first STATE.
   c.sample(true, 0); c.sample(true, 40); c.takeOutbound();
-  c.tick(999);
+  c.tick(1039);
   TEST_ASSERT_TRUE(c.takeOutbound().empty());
-  c.tick(1000);
+  c.tick(1040);
   TEST_ASSERT_EQUAL_STRING("STATE 1 ON\n", c.takeOutbound().c_str());
   c.tick(3000);
   TEST_ASSERT_EQUAL_STRING("STATE 1 ON\nPING 1\n", c.takeOutbound().c_str());
